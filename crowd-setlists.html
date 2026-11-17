@@ -1,0 +1,637 @@
+<title>Crowd Setlists</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: header with score + crowd meters (meters also pick the crowd), then three views: Discover cards, Library, Setlist. */
+:root{
+  --bg:#f3f5f2; --surface:#ffffff; --ink:#1d2621; --muted:#5f6b64; --line:#d8dfda;
+  --accent:#b5651d; --accent-ink:#ffffff; --soft:#e8ede9;
+  --ok:#2f7a4a; --warn:#a15c00; --bad:#b03030; --star:#c58a00;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --body:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#131915; --surface:#1b231e; --ink:#e6ece8; --muted:#9aa8a0; --line:#2c3831;
+  --accent:#e0913f; --accent-ink:#1a1206; --soft:#222c26;
+  --ok:#6cc58e; --warn:#e3a54a; --bad:#ef7b7b; --star:#f0c24a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#131915; --surface:#1b231e; --ink:#e6ece8; --muted:#9aa8a0; --line:#2c3831;
+  --accent:#e0913f; --accent-ink:#1a1206; --soft:#222c26;
+  --ok:#6cc58e; --warn:#e3a54a; --bad:#ef7b7b; --star:#f0c24a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
+.wrap{max-width:1100px;margin:0 auto;padding-block:24px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:end;justify-content:space-between}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(28px,5vw,40px);line-height:1.05;margin:0}
+h2{font-family:var(--display);font-weight:600;font-size:20px;margin:0}
+.sub{color:var(--muted);margin:4px 0 0}
+.status{font-size:13px;color:var(--muted);display:flex;gap:8px;align-items:center}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}.dot.warn{background:var(--warn)}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:6px 12px}
+button:hover:not(:disabled){border-color:var(--muted)}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+input,select,textarea{font:inherit;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;padding:6px 10px;min-width:0}
+a{color:var(--accent)}
+.stats{display:flex;flex-wrap:wrap;gap:10px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 14px;display:grid;gap:0;min-width:96px}
+.stat b{font-family:var(--mono);font-size:20px;font-weight:500;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+.meters{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+.meter{text-align:left;display:grid;gap:6px;padding:9px 12px;border-radius:10px}
+.meter[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.meter .top{display:flex;gap:8px;align-items:center;justify-content:space-between;font-weight:600;font-size:13px}
+.meter .top span:first-child{display:flex;gap:6px;align-items:center;min-width:0}
+.meter .n{font-family:var(--mono);font-size:12px;color:var(--muted);flex:none}
+.bar{height:6px;border-radius:3px;background:var(--soft);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:3px}
+.sw{width:10px;height:10px;border-radius:3px;flex:none}
+nav.tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);padding-bottom:0}
+nav.tabs button{border:0;border-bottom:3px solid transparent;border-radius:0;background:none;padding:8px 14px;font-weight:600;color:var(--muted)}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:12px;min-width:0}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+input[type=search]{flex:1 1 180px}
+.empty{color:var(--muted);font-size:14px;padding:12px 0;margin:0}
+.notice{border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:8px;padding:10px 12px;font-size:14px;background:var(--surface)}
+.notice.bad{border-left-color:var(--bad)}
+.tag{font-size:12px;border-radius:999px;padding:2px 8px;display:inline-flex;gap:5px;align-items:center;background:var(--soft)}
+.num{font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.diff{display:inline-flex;gap:2px;align-items:center}
+.diff i{width:4px;height:10px;border-radius:1px;background:var(--line)}
+.diff i.on{background:var(--accent)}
+.muted{color:var(--muted);font-size:13px}
+
+/* Discover */
+.deck{display:grid;gap:12px;max-width:560px;margin:0 auto;width:100%}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;display:grid;gap:12px;box-shadow:0 1px 0 var(--line)}
+.card .title{font-family:var(--display);font-weight:800;font-size:28px;line-height:1.1;margin:0}
+.card .artist{color:var(--muted);margin:2px 0 0}
+.why{margin:0;font-size:15px}
+.match{display:flex;gap:6px;align-items:baseline;font-size:14px}
+.match .s{color:var(--star);font-size:16px}
+.learn{display:flex;flex-wrap:wrap;gap:8px}
+.learn a{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 12px;text-decoration:none;font-weight:600;font-size:14px}
+.votes{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.votes button{padding:12px 6px;font-weight:600;font-size:15px;border-radius:12px}
+.votes .up{background:var(--ok);border-color:var(--ok);color:#fff}
+.choice{display:grid;gap:8px;padding:12px;border:1px dashed var(--line);border-radius:12px}
+.choice .row{display:flex;flex-wrap:wrap;gap:6px}
+.reasons{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px}
+.reasons button{border-radius:999px;padding:3px 10px;font-size:13px}
+.reasons button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.queue{font-size:13px;color:var(--muted);text-align:center}
+.pop{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ink);color:var(--bg);font-weight:600;border-radius:999px;padding:8px 16px;font-size:14px;pointer-events:none;opacity:0;z-index:5}
+.pop.show{opacity:1}
+@media (prefers-reduced-motion:no-preference){.pop{transition:opacity .25s, transform .25s}.pop.show{transform:translateX(-50%) translateY(-6px)}}
+
+/* Library */
+.songs{display:grid}
+.song{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:12px 0;border-top:1px solid var(--line)}
+.song:first-child{border-top:0}
+.t{font-weight:600}
+.a{color:var(--muted);font-size:13px}
+.meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;grid-column:1/-1}
+.acts{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
+.acts button,.acts a{font-size:13px;padding:4px 10px}
+.acts a{border:1px solid var(--line);border-radius:8px;text-decoration:none}
+.editor{grid-column:1/-1;display:grid;gap:8px;padding:10px;border:1px dashed var(--line);border-radius:10px}
+.editor .checks{display:flex;flex-wrap:wrap;gap:6px}
+.editor label.chk{display:inline-flex;gap:6px;align-items:center;font-size:13px;padding:3px 8px;border-radius:999px;background:var(--soft);cursor:pointer}
+.form{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.form label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
+.form label.wide{grid-column:1/-1}
+.editor .row{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;align-items:center}
+
+/* Setlist */
+.grid2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:820px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.set{margin:0;padding:0;counter-reset:s}
+.set li{list-style:none;display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.set li:first-child{border-top:0}
+.set li::before{counter-increment:s;content:counter(s);font-family:var(--mono);font-size:12px;color:var(--muted);text-align:right}
+.mini{display:flex;gap:4px}
+.mini button{padding:2px 7px;font-size:12px}
+.summary{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--muted)}
+.summary b{font-family:var(--mono);color:var(--ink);font-weight:500}
+.added{color:var(--ok);font-size:13px;font-weight:600}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Crowd Setlists</h1>
+      <p class="sub">Find the songs each crowd wants, learn them, and build the set.</p>
+    </div>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText">Connecting to Google Sheets…</span><button id="refresh" type="button">Refresh</button></div>
+  </header>
+
+  <div id="notice" hidden></div>
+
+  <div class="stats" id="stats"></div>
+  <div class="meters" id="meters" aria-label="Crowds"></div>
+
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" data-tab="discover">Discover</button>
+    <button type="button" role="tab" data-tab="library">Library</button>
+    <button type="button" role="tab" data-tab="setlist">Setlist</button>
+  </nav>
+
+  <section id="v-discover" hidden></section>
+  <section id="v-library" class="panel" hidden></section>
+  <section id="v-setlist" hidden></section>
+</div>
+<div class="pop" id="pop" aria-live="polite"></div>
+
+<script>
+const SHEET_ID = "1lKH0HdpqFFAiq90JxJMtxhMh2hSE2st72W0oayqNxSM";
+const SERVER = "Google Sheets";
+const RANGES = {songs:"Songs!A:M", crowds:"Crowds!A:F", events:"Events!A:I", practice:"Practice!A:J"};
+const STATUSES = ["Wishlist","Struggling","Learning","Comfortable","Solid","Performance-Ready"];
+const READY_AT = 3; // Comfortable and above count as ready
+const FOCUS = ["Chords","Strumming","Fingerpicking","Singing","Rhythm/Timing","Full Performance","Other"];
+const CONFIDENCE = STATUSES.slice(1);
+const REASONS = ["don't know it","too high to sing","too cheesy","too hard to play","love it"];
+const PALETTE = ["#2f6f5e","#9a4a2b","#5a5a9e","#3f6e8f","#8a6d1f","#7a3f6e","#4f7a2f","#b5651d","#3b7f86","#8f3f4f"];
+const BATCH = 6;
+const TASTE = "Plays solo acoustic guitar. Loves lyrics and storytelling, recognizable guitar parts, and songs that are singalong or mellow, old and new. Favorites: Fast Car (Tracy Chapman), The Boxer (Simon & Garfunkel), Wish You Were Here (Pink Floyd), Between the Bars (Elliott Smith), Silver Lining (Mt. Joy), The Stable Song (Gregory Alan Isakov), Your Best American Girl (Mitski). Not a strong singer: lower range, conversational delivery, or a chorus the crowd carries is easier.";
+
+let mcp = null, sample = null;
+const S = {songs:[], crowds:[], events:[], practice:[], loaded:{}, errors:{}};
+const unwatch = {};
+let ui = Object.assign({tab:"discover", crowd:"", setName:"", setIds:[], libCrowd:"", libStatus:"", setCrowd:"", showAll:false}, load("cs-ui") || {});
+let queues = load("cs-queues") || {};
+let dealing = null, dealError = "", downMode = null, learnOpen = false, lastVote = null, editing = null;
+
+const $ = id => document.getElementById(id);
+// Only touch the DOM when the markup changed, so a background sync can't swallow a click mid-press.
+function setHTML(el, html){ if(el._html===html) return false; el._html=html; el.innerHTML=html; return true; }
+function load(k){ try{ return JSON.parse(localStorage.getItem(k)) }catch(e){ return null } }
+function store(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)) }catch(e){} }
+function saveUI(){ store("cs-ui", ui) }
+function saveQueues(){ store("cs-queues", queues) }
+function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function key(title, artist){ return (String(title)+"|"+String(artist)).toLowerCase().replace(/[^a-z0-9|]/g,""); }
+function txt(v){ return v===""||v==null ? "" : "'"+String(v); }   // keep text as text in the sheet
+function uid(){ return "e"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function today(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function localDay(iso){ const d=new Date(iso); if(isNaN(d)) return String(iso||"").slice(0,10); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function secs(len){ const m=/^(\d+):(\d{2})$/.exec((len||"").trim()); return m? (+m[1])*60+(+m[2]) : 0; }
+function fmt(s){ const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return h? `${h}h ${m}m` : `${m}:${String(x).padStart(2,"0")}`; }
+function niceDate(d){ const x=new Date(d+"T12:00:00"); return isNaN(x)? d : x.toLocaleDateString([], {month:"short", day:"numeric"}); }
+function ugUrl(t,a){ return "https://www.ultimate-guitar.com/search.php?search_type=title&value="+encodeURIComponent(t+" "+a); }
+function ytUrl(t,a){ return "https://www.youtube.com/results?search_query="+encodeURIComponent(t+" "+a+" guitar lesson"); }
+function listenYt(t,a){ return "https://www.youtube.com/results?search_query="+encodeURIComponent(t+" "+a); }
+function listenSpotify(t,a){ return "https://open.spotify.com/search/"+encodeURIComponent(t+" "+a); }
+function statusIdx(s){ const i=STATUSES.indexOf(s); return i<0?0:i; }
+function isReady(s){ return statusIdx(s.status)>=READY_AT; }
+function crowdByName(n){ return S.crowds.find(c=>c.name===n); }
+function activeCrowds(){ return S.crowds.filter(c=>c.active); }
+function diffBar(d){ if(!d) return ""; let h=""; for(let i=1;i<=10;i++) h+=`<i class="${i<=d?"on":""}"></i>`; return `<span class="diff" title="Difficulty ${d}/10" aria-label="Difficulty ${d} of 10">${h}</span>`; }
+
+/* ---------- parsing ---------- */
+function table(values){
+  const rows = values || []; const head = (rows[0]||[]).map(h=>String(h).trim().toLowerCase());
+  return rows.slice(1).map((r,i)=>{ const o={_row:i+2}; head.forEach((h,j)=>o[h]=r[j]??""); return o; });
+}
+const PARSE = {
+  songs: v => table(v).filter(r=>r.title).map(r=>({row:r._row, id:+r.song_id||0, title:r.title, artist:r.artist, genre:r.genre, len:r.length, diff:+r.difficulty||0,
+    status:STATUSES.includes(r.status)?r.status:"Wishlist", crowds:String(r.crowds).split(",").map(s=>s.trim()).filter(Boolean),
+    chords:r.chords_url, lesson:r.lesson_url, vocal:r.vocal_ease, source:r.source, added:r.added_at})),
+  crowds: v => table(v).filter(r=>r.name).map((r,i)=>({row:r._row, id:r.crowd_id, name:r.name, desc:r.description, color:r.color||PALETTE[i%PALETTE.length], goal:+r.ready_goal||15, active:String(r.active).toUpperCase()!=="FALSE"})),
+  events: v => table(v).filter(r=>r.type).map(r=>({row:r._row, id:r.event_id, ts:r.timestamp, type:r.type, songId:+r.song_id||null, title:r.title, artist:r.artist, crowd:r.crowd, value:r.value, note:r.note})),
+  practice: v => table(v).filter(r=>r.song).map(r=>({row:r._row, date:r.date, songId:+r.song_id||null, song:r.song, minutes:+r.minutes||0, tempo:r.tempo_bpm, focus:r.focus_area, goal:r.goal, rating:+r.self_rating||0, confidence:r.confidence, notes:r.notes}))
+};
+
+/* ---------- scoring ---------- */
+function eventPoints(e){
+  if(e.type==="vote") return e.value==="up"?2:1;
+  if(e.type==="status_change"){
+    const from = (/^from: (.+)$/.exec(e.note||"")||[])[1]; const steps = statusIdx(e.value) - statusIdx(from);
+    if(steps<=0) return 0;
+    return e.value==="Performance-Ready" ? 20 + 5*(steps-1) : 5*steps;
+  }
+  return 0;
+}
+function practicePoints(p){ return Math.min(6, Math.floor((p.minutes||0)/5)); }
+function score(){
+  const days = new Set(); let points=0, todayCount=0; const t=today();
+  S.events.forEach(e=>{ points+=eventPoints(e); const d=localDay(e.ts); days.add(d); if(d===t) todayCount++; });
+  S.practice.forEach(p=>{ points+=practicePoints(p); const d=String(p.date).slice(0,10); days.add(d); if(d===t) todayCount++; });
+  let streak=0; const d=new Date(); if(!days.has(t)) d.setDate(d.getDate()-1);
+  while(days.has(localDay(d.toISOString()))){ streak++; d.setDate(d.getDate()-1); }
+  return {points, streak, todayCount};
+}
+
+/* ---------- header ---------- */
+function renderHeader(){
+  const sc = score();
+  setHTML($("stats"), `<div class="stat"><b>${sc.points}</b><span>points</span></div>
+    <div class="stat"><b>${sc.streak}</b><span>day streak</span></div>
+    <div class="stat"><b>${sc.todayCount}</b><span>today</span></div>
+    <div class="stat"><b>${S.songs.filter(isReady).length}</b><span>songs ready</span></div>`);
+  const cs = activeCrowds();
+  if(!ui.crowd || !cs.some(c=>c.name===ui.crowd)) ui.crowd = cs[0]?.name || "";
+  setHTML($("meters"), cs.map(c=>{
+    const ready = S.songs.filter(s=>s.crowds.includes(c.name) && isReady(s)).length;
+    const pct = Math.min(100, Math.round(ready/c.goal*100));
+    return `<button type="button" class="meter" aria-pressed="${c.name===ui.crowd}" data-crowd="${esc(c.name)}" title="${esc(c.desc||c.name)}">
+      <span class="top"><span><span class="sw" style="background:${esc(c.color)}"></span>${esc(c.name)}</span><span class="n">${ready}/${c.goal}</span></span>
+      <span class="bar"><i style="width:${pct}%;background:${esc(c.color)}"></i></span></button>`;
+  }).join(""));
+}
+function pop(text){ const p=$("pop"); p.textContent=text; p.classList.add("show"); clearTimeout(pop.t); pop.t=setTimeout(()=>p.classList.remove("show"),1400); }
+
+/* ---------- discover ---------- */
+function currentQueue(){ return (queues[ui.crowd] ||= []); }
+function excluded(crowdName){
+  const set = new Set(S.songs.map(s=>key(s.title,s.artist)));
+  const weekAgo = Date.now()-7*864e5;
+  S.events.filter(e=>e.type==="vote").forEach(e=>{
+    if(e.value==="down_not_mine") set.add(key(e.title,e.artist));
+    if(e.value==="down_wrong_crowd" && e.crowd===crowdName) set.add(key(e.title,e.artist));
+    if(e.value==="skip" && e.crowd===crowdName && new Date(e.ts).getTime()>weekAgo) set.add(key(e.title,e.artist));
+  });
+  return set;
+}
+function practiceSummary(){
+  const by = {};
+  S.practice.forEach(p=>{ const k=p.song; (by[k] ||= {mins:0, sessions:[]}); by[k].mins+=p.minutes; by[k].sessions.push(p); });
+  return Object.entries(by).map(([song,v])=>{ const l=v.sessions.sort((a,b)=>String(a.date).localeCompare(b.date)).at(-1);
+    return `- ${song}: latest ${l.rating}/10, ${l.confidence}, focus ${l.focus}, ${v.mins} min total, note "${String(l.notes).slice(0,120)}"`; }).join("\n");
+}
+function buildPrompt(crowd, ex){
+  const lib = S.songs.map(s=>`- ${s.title} by ${s.artist} | ${s.status} | crowds: ${s.crowds.join(", ")||"none"}`).join("\n");
+  const votes = S.events.filter(e=>e.type==="vote").slice(-200).map(e=>`- ${e.title} by ${e.artist} | crowd: ${e.crowd} | ${e.value}${e.note?" | reason: "+e.note:""}`).join("\n") || "(none yet)";
+  const queued = Object.values(queues).flat().map(c=>`${c.title} by ${c.artist}`);
+  return `You recommend songs for a solo acoustic guitar player to cover for one specific crowd.
+
+CROWD: ${crowd.name}
+${crowd.desc||""}
+
+GOAL: songs this crowd will want to hear. Crowd favorites for this kind of audience, from any era or genre, that work on one acoustic guitar. The crowd's taste comes first. Set taste_match true only when the song also fits the player's own taste below.
+
+PLAYER TASTE: ${TASTE}
+
+LIBRARY (the player already has these; never suggest them):
+${lib}
+
+PRACTICE HISTORY (lean toward songs similar to ones they learned quickly or rated high; be careful with songs like the ones where singing was a struggle):
+${practiceSummary()||"(none yet)"}
+
+VOTE HISTORY (up = wanted it for that crowd; down_not_mine = dislikes the song itself; down_wrong_crowd = wrong audience for that crowd; skip = not now). Learn from these, including reasons:
+${votes}
+
+ALSO DO NOT SUGGEST: ${queued.join("; ")||"(nothing)"}
+
+Reply with only a JSON array of ${BATCH} objects and no other text, like:
+[{"title":"Song","artist":"Artist","year":1994,"why":"One sentence on why this crowd wants it.","taste_match":true,"taste_note":"short reason, or empty","difficulty":4,"vocal":"short note on how easy it is to sing"}]
+Vary eras and artists. difficulty is 1-10 for acoustic guitar.`;
+}
+async function deal(background){
+  if(!sample || dealing) return;
+  const crowd = crowdByName(ui.crowd); if(!crowd) return;
+  const ctl = new AbortController(); dealing = {ctl, crowd:crowd.name}; dealError="";
+  if(!background) renderDiscover();
+  try{
+    const ex = excluded(crowd.name);
+    const out = await sample.json(buildPrompt(crowd, ex), {signal:ctl.signal, cache:false});
+    const seen = new Set(Object.values(queues).flat().map(c=>key(c.title,c.artist)));
+    const cards = (Array.isArray(out)?out:[]).filter(c=>c && c.title && c.artist).map(c=>({
+      title:String(c.title), artist:String(c.artist), year:c.year?String(c.year):"", why:String(c.why||""),
+      match:!!c.taste_match, matchNote:String(c.taste_note||""), diff:Math.max(0,Math.min(10,Math.round(+c.difficulty||0))), vocal:String(c.vocal||"")
+    })).filter(c=>{ const k=key(c.title,c.artist); if(ex.has(k)||seen.has(k)) return false; seen.add(k); return true; });
+    (queues[crowd.name] ||= []).push(...cards); saveQueues();
+    if(!cards.length) dealError = "No new songs came back. Try again.";
+  }catch(e){
+    if(e.code!=="cancelled") dealError = sampleCopy(e.code);
+    if(["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"].includes(e.code)) sample=null;
+  }finally{ dealing=null; renderDiscover(); }
+}
+function sampleCopy(code){
+  return ({not_granted:"Suggestions need your OK to use Claude. Reload the page and choose Allow.",
+    sampling_disabled:"Claude isn't available for this account, so suggestions are off.",
+    rate_limited:"Too many requests just now. Wait a minute, then deal again.",
+    session_expired:"Your Claude sign-in expired. Sign in again, then deal again.",
+    invalid_json:"The suggestions came back in a broken format. Try again.",
+    refused:"Claude declined that request. Try another crowd."})[code] || "Suggestions didn't load. Try again.";
+}
+function renderDiscover(){
+  const v = $("v-discover");
+  if(!activeCrowds().length){ setHTML(v, `<p class="empty">Loading your crowds…</p>`); return; }
+  const crowd = crowdByName(ui.crowd); const q = currentQueue(); const card = q[0];
+  let body = "";
+  if(!sample){
+    body = `<div class="notice">Suggestions use Claude, which isn't available in this view. Open this page in claude.ai while signed in. Your Library and Setlist still work.</div>`;
+  } else if(card){
+    const others = activeCrowds().filter(c=>c.name!==crowd.name);
+    const choice = downMode==="pick" ? `<div class="choice"><b>Wrong crowd. Who would want it?</b>
+        <div class="row">${others.map(c=>`<button type="button" data-wrong="${esc(c.name)}"><span class="sw" style="background:${esc(c.color)};display:inline-block;margin-right:6px"></span>${esc(c.name)}</button>`).join("")}</div>
+        <div class="row"><input type="text" id="newCrowd" placeholder="New crowd name" aria-label="New crowd name" style="flex:1 1 160px"><input type="text" id="newCrowdDesc" placeholder="Who is this crowd? (optional)" aria-label="New crowd description" style="flex:2 1 220px"><button type="button" data-newcrowd>+ New crowd</button></div>
+        <div class="row"><button type="button" data-wrong="">Just mark it wrong for ${esc(crowd.name)}</button><button type="button" data-downcancel>Back</button></div></div>`
+      : downMode==="ask" ? `<div class="choice"><b>What's wrong with it?</b><div class="row"><button type="button" data-notmine>Not my song</button><button type="button" data-wrongcrowd>Wrong crowd</button><button type="button" data-downcancel>Back</button></div></div>` : "";
+    body = `<article class="card" aria-live="polite">
+      <div><p class="title">${esc(card.title)}</p><p class="artist">${esc(card.artist)}${card.year?" · "+esc(card.year):""}</p></div>
+      <p class="why">${esc(card.why)}</p>
+      ${card.match?`<div class="match"><span class="s" aria-hidden="true">★</span><span><b>Fits your taste.</b> ${esc(card.matchNote)}</span></div>`:""}
+      <div class="tools">${diffBar(card.diff)}${card.vocal?`<span class="muted">Voice: ${esc(card.vocal)}</span>`:""}</div>
+      <div class="learn"><a href="${listenYt(card.title,card.artist)}" target="_blank" rel="noopener">▶ Listen on YouTube ↗</a><a href="${listenSpotify(card.title,card.artist)}" target="_blank" rel="noopener">Spotify ↗</a></div>
+      ${learnOpen?`<div class="learn"><a href="${ugUrl(card.title,card.artist)}" target="_blank" rel="noopener">Chords ↗</a><a href="${ytUrl(card.title,card.artist)}" target="_blank" rel="noopener">Lesson ↗</a></div>`
+        :`<div><button type="button" data-learn>Learn</button></div>`}
+      ${choice || `<div class="votes"><button type="button" class="up" data-vote="up">👍 Want it</button><button type="button" data-vote="skip">⏭ Not now</button><button type="button" data-vote="down">👎</button></div>`}
+    </article>
+    <p class="queue">${q.length-1} more ready for ${esc(crowd.name)}${dealing?" · finding more…":""}</p>`;
+  } else if(dealing){
+    body = `<div class="card"><p class="why">Finding songs ${esc(dealing.crowd)} will want to hear…</p><div><button type="button" data-stop>Stop</button></div></div>`;
+  } else {
+    body = `<div class="card"><h2>${esc(crowd.name)}</h2><p class="why muted">${esc(crowd.desc||"")}</p>
+      ${dealError?`<div class="notice bad">${esc(dealError)}</div>`:""}
+      <div><button type="button" class="primary" data-deal>Deal suggestions</button></div>
+      <p class="muted">Vote on one card at a time. 👍 adds the song to your Wishlist for this crowd.</p></div>`;
+  }
+  const reasons = lastVote ? `<div class="reasons"><span class="muted">${esc(lastVote.title)}: why? (optional)</span>${REASONS.map(r=>`<button type="button" data-reason="${esc(r)}" aria-pressed="${lastVote.note===r}">${esc(r)}</button>`).join("")}</div>` : "";
+  setHTML(v, `<div class="deck">${body}${reasons}</div>`);
+}
+async function addSuggested(card, crowdName){
+  const id = Math.max(0, ...S.songs.map(s=>s.id)) + 1;
+  const song = {row:null, id, title:card.title, artist:card.artist, genre:"", len:"", diff:card.diff, status:"Wishlist", crowds:[crowdName], chords:"", lesson:"", vocal:"", source:"suggested", added:today()};
+  S.songs.push(song);
+  const r = await mcp.callTool(SERVER, "append_values", {spreadsheetId:SHEET_ID, range:"Songs!A1", values:[[id, txt(song.title), txt(song.artist), "", "", song.diff||"", "Wishlist", txt(crowdName), "", "", "", "suggested", txt(song.added)]]});
+  song.row = rowOf(r); refresh("songs");
+  return song;
+}
+async function logEvent(e){
+  const ev = Object.assign({id:uid(), ts:new Date().toISOString(), songId:null, title:"", artist:"", crowd:"", value:"", note:""}, e);
+  S.events.push(ev); renderHeader();
+  const r = await mcp.callTool(SERVER, "append_values", {spreadsheetId:SHEET_ID, range:"Events!A1",
+    values:[[txt(ev.id), txt(ev.ts), txt(ev.type), ev.songId??"", txt(ev.title), txt(ev.artist), txt(ev.crowd), txt(ev.value), txt(ev.note)]]});
+  ev.row = rowOf(r); refresh("events");
+  return ev;
+}
+function rowOf(r){ const m=/![A-Z]+(\d+)/.exec(r?.payload?.updates?.updatedRange||""); return m? +m[1] : null; }
+async function vote(kind, target){
+  const crowdName = ui.crowd; const q = currentQueue(); const card = q.shift(); saveQueues();
+  downMode=null; learnOpen=false; if(!card) return;
+  const base = {title:card.title, artist:card.artist, crowd:crowdName};
+  let pts = 0, ev;
+  renderDiscover();
+  try{
+    if(kind==="up"){ const s = await addSuggested(card, crowdName); ev = await logEvent({...base, type:"vote", value:"up", songId:s.id}); pts=2; }
+    else if(kind==="skip"){ ev = await logEvent({...base, type:"vote", value:"skip"}); pts=1; }
+    else if(kind==="not_mine"){ ev = await logEvent({...base, type:"vote", value:"down_not_mine"}); pts=1; }
+    else if(kind==="wrong"){
+      ev = await logEvent({...base, type:"vote", value:"down_wrong_crowd"}); pts=1;
+      if(target){ const s = await addSuggested(card, target); await logEvent({...base, crowd:target, type:"vote", value:"up", songId:s.id}); pts+=2; }
+    }
+    lastVote = ev; pop(`+${pts} point${pts>1?"s":""}${target?` · added for ${target}`:""}`);
+  }catch(e){ explain(e, "save"); }
+  renderAll();
+  if(sample && currentQueue().length<=2 && !dealing) deal(true);
+}
+async function addCrowd(name, desc){
+  name = name.trim(); if(!name) return null;
+  if(crowdByName(name)) return crowdByName(name);
+  const c = {row:null, id:name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""), name, desc:desc.trim(), color:PALETTE[S.crowds.length%PALETTE.length], goal:15, active:true};
+  S.crowds.push(c);
+  await mcp.callTool(SERVER, "append_values", {spreadsheetId:SHEET_ID, range:"Crowds!A1", values:[[txt(c.id), txt(c.name), txt(c.desc), txt(c.color), 15, true]]});
+  refresh("crowds");
+  await logEvent({type:"crowd_added", crowd:name, value:name});
+  return c;
+}
+
+/* ---------- library ---------- */
+function lastPractice(s){ return S.practice.filter(p=>p.songId===s.id || (!p.songId && p.song===s.title)).sort((a,b)=>String(a.date).localeCompare(b.date)).at(-1); }
+function practiceMinutes(s){ return S.practice.filter(p=>p.songId===s.id).reduce((t,p)=>t+p.minutes,0); }
+function crowdTags(list){ return list.map(n=>{ const c=crowdByName(n); return `<span class="tag"><span class="sw" style="background:${esc(c?.color||"var(--muted)")}"></span>${esc(n)}</span>`; }).join("") || `<span class="tag">No crowd</span>`; }
+function crowdOptions(sel){ return `<option value="">All crowds</option>` + activeCrowds().map(c=>`<option ${c.name===sel?"selected":""}>${esc(c.name)}</option>`).join(""); }
+function renderLibrary(){
+  const v = $("v-library");
+  const q = (v.querySelector("#libQ")?.value || "").trim().toLowerCase();
+  let list = S.songs.filter(s=>(!ui.libCrowd || s.crowds.includes(ui.libCrowd)) && (!ui.libStatus || s.status===ui.libStatus) && (!q || (s.title+" "+s.artist).toLowerCase().includes(q)));
+  list.sort((a,b)=>statusIdx(b.status)-statusIdx(a.status) || String(a.title).localeCompare(b.title));
+  const rows = list.map(s=>{
+    const lp = lastPractice(s), mins = practiceMinutes(s);
+    const ed = editing && editing.id===s.id ? editorFor(s, editing.kind, lp) : "";
+    return `<div class="song">
+      <div><div class="t">${esc(s.title)}</div><div class="a">${esc(s.artist)}${s.genre?" · "+esc(s.genre):""}${s.len?" · "+esc(s.len):""}</div></div>
+      <div><select data-status="${s.id}" aria-label="Status for ${esc(s.title)}">${STATUSES.map(x=>`<option ${x===s.status?"selected":""}>${x}</option>`).join("")}</select></div>
+      <div class="meta">${crowdTags(s.crowds)}${diffBar(s.diff)}${lp?`<span class="muted">Last practiced ${esc(niceDate(lp.date))} · ${lp.rating}/10 · ${mins} min total</span>`:`<span class="muted">Not practiced yet</span>`}</div>
+      <div class="acts">
+        <a href="${listenYt(s.title,s.artist)}" target="_blank" rel="noopener">▶ Listen ↗</a>
+        <a href="${esc(s.chords||ugUrl(s.title,s.artist))}" target="_blank" rel="noopener">${s.chords?"Saved chords":"Chords"} ↗</a>
+        <a href="${esc(s.lesson||ytUrl(s.title,s.artist))}" target="_blank" rel="noopener">${s.lesson?"Saved lesson":"Lesson"} ↗</a>
+        <button type="button" data-edit="practice" data-id="${s.id}" class="primary">Log practice</button>
+        <button type="button" data-edit="crowds" data-id="${s.id}">Crowds</button>
+        <button type="button" data-edit="links" data-id="${s.id}">Save links</button>
+      </div>${ed}</div>`;
+  }).join("");
+  const focusQ = document.activeElement?.id==="libQ";
+  setHTML(v, `<h2>Library</h2>
+    <div class="tools"><input type="search" id="libQ" placeholder="Search song or artist" aria-label="Search songs" value="${esc(q)}">
+      <select id="libCrowd" aria-label="Filter by crowd">${crowdOptions(ui.libCrowd)}</select>
+      <select id="libStatus" aria-label="Filter by status"><option value="">All statuses</option>${STATUSES.map(x=>`<option ${x===ui.libStatus?"selected":""}>${x}</option>`).join("")}</select></div>
+    <div class="songs">${rows || `<p class="empty">${S.loaded.songs?"No songs match.":"Loading your songs…"}</p>`}</div>`);
+  if(focusQ){ const i=$("libQ"); i.focus(); i.setSelectionRange(i.value.length,i.value.length); }
+}
+function editorFor(s, kind, lp){
+  const actions = `<div class="row"><button type="button" data-cancel>Cancel</button><button type="button" class="primary" data-save="${kind}" data-id="${s.id}">Save to sheet</button></div>`;
+  if(kind==="crowds") return `<div class="editor"><div class="checks">${activeCrowds().map(c=>`<label class="chk"><input type="checkbox" value="${esc(c.name)}" ${s.crowds.includes(c.name)?"checked":""}>${esc(c.name)}</label>`).join("")}</div>${actions}</div>`;
+  if(kind==="links") return `<div class="editor"><div class="form">
+      <label class="wide">Chords or tab link<input type="url" id="edChords" value="${esc(s.chords)}" placeholder="Paste a tab you like"></label>
+      <label class="wide">Lesson link<input type="url" id="edLesson" value="${esc(s.lesson)}" placeholder="Paste a lesson video you like"></label></div>
+      <p class="muted" style="margin:0">Leave blank to use the search links.</p>${actions}</div>`;
+  const conf = lp?.confidence || (s.status==="Wishlist"?"Struggling":s.status);
+  return `<div class="editor"><div class="form">
+      <label>Date<input type="date" id="pDate" value="${today()}"></label>
+      <label>Minutes<input type="number" id="pMin" min="1" value="${lp?.minutes||10}"></label>
+      <label>Tempo (BPM)<input type="number" id="pTempo" min="0" placeholder="optional"></label>
+      <label>Focus area<select id="pFocus">${FOCUS.map(f=>`<option ${f===(lp?.focus||"Chords")?"selected":""}>${f}</option>`).join("")}</select></label>
+      <label>Self-rating (1-10)<input type="number" id="pRating" min="1" max="10" value="${lp?.rating||5}"></label>
+      <label>Confidence<select id="pConf">${CONFIDENCE.map(c=>`<option ${c===conf?"selected":""}>${c}</option>`).join("")}</select></label>
+      <label class="wide">Goal<input type="text" id="pGoal" value="${esc(lp?.goal||"")}"></label>
+      <label class="wide">Notes<input type="text" id="pNotes" placeholder="What to work on next"></label></div>
+      <label class="chk muted"><input type="checkbox" id="pSetStatus" checked> Set the song's status to the confidence you pick</label>
+      ${actions}</div>`;
+}
+async function setStatus(s, to){
+  const from = s.status; if(from===to) return;
+  s.status = to; renderAll();
+  try{
+    await mcp.callTool(SERVER, "update_values", {spreadsheetId:SHEET_ID, range:`Songs!G${s.row}`, values:[[to]]});
+    refresh("songs");
+    const ev = await logEvent({type:"status_change", songId:s.id, title:s.title, artist:s.artist, value:to, note:"from: "+from});
+    const p = eventPoints(ev); pop(p? `+${p} points · ${s.title} is ${to}` : `${s.title} is ${to}`);
+  }catch(e){ s.status = from; explain(e, "save"); $("v-library")._html=""; renderAll(); }
+}
+async function saveEditor(kind, s, btn){
+  btn.disabled = true; btn.textContent = "Saving…";
+  try{
+    if(kind==="crowds"){
+      const picked = [...btn.closest(".editor").querySelectorAll("input:checked")].map(c=>c.value);
+      await mcp.callTool(SERVER, "update_values", {spreadsheetId:SHEET_ID, range:`Songs!H${s.row}`, values:[[txt(picked.join(", "))]]});
+      s.crowds = picked;
+    } else if(kind==="links"){
+      const c = $("edChords").value.trim(), l = $("edLesson").value.trim();
+      await mcp.callTool(SERVER, "update_values", {spreadsheetId:SHEET_ID, range:`Songs!I${s.row}:J${s.row}`, values:[[txt(c), txt(l)]]});
+      s.chords = c; s.lesson = l;
+    } else {
+      const p = {date:$("pDate").value||today(), songId:s.id, song:s.title, minutes:Math.max(1,+$("pMin").value||0), tempo:$("pTempo").value, focus:$("pFocus").value,
+        goal:$("pGoal").value.trim(), rating:Math.max(1,Math.min(10,+$("pRating").value||5)), confidence:$("pConf").value, notes:$("pNotes").value.trim()};
+      const setIt = $("pSetStatus").checked;
+      await mcp.callTool(SERVER, "append_values", {spreadsheetId:SHEET_ID, range:"Practice!A1",
+        values:[[txt(p.date), p.songId, txt(p.song), p.minutes, p.tempo?+p.tempo:"", txt(p.focus), txt(p.goal), p.rating, txt(p.confidence), txt(p.notes)]]});
+      S.practice.push(p); refresh("practice");
+      const pts = practicePoints(p); pop(`+${pts} point${pts===1?"":"s"} · ${p.minutes} min on ${s.title}`);
+      editing = null;
+      if(setIt && p.confidence!==s.status) await setStatus(s, p.confidence);
+    }
+    refresh("songs"); editing = null; notice(""); renderAll();
+  }catch(e){ btn.disabled=false; btn.textContent="Save to sheet"; explain(e, "save"); }
+}
+
+/* ---------- setlist ---------- */
+function renderSetlist(){
+  const v = $("v-setlist");
+  let pool = S.songs.filter(s=>(ui.showAll || isReady(s)) && (!ui.setCrowd || s.crowds.includes(ui.setCrowd)));
+  pool.sort((a,b)=>String(a.title).localeCompare(b.title));
+  ui.setIds = ui.setIds.filter(id=>S.songs.some(s=>s.id===id) || !S.loaded.songs);
+  const items = ui.setIds.map(id=>S.songs.find(s=>s.id===id)).filter(Boolean);
+  const total = items.reduce((t,s)=>t+secs(s.len),0), missing = items.filter(s=>!secs(s.len)).length;
+  setHTML(v, `<div class="grid2">
+    <div class="panel"><h2>Songs</h2>
+      <div class="tools"><select id="setCrowd" aria-label="Crowd">${crowdOptions(ui.setCrowd)}</select>
+        <label class="muted"><input type="checkbox" id="showAll" ${ui.showAll?"checked":""}> Include songs still in progress</label></div>
+      <div class="songs">${pool.map(s=>`<div class="song"><div><div class="t">${esc(s.title)}</div><div class="a">${esc(s.artist)} · ${esc(s.status)}${s.len?" · "+esc(s.len):""}</div></div>
+        <div>${ui.setIds.includes(s.id)?`<span class="added">In set</span>`:`<button type="button" class="primary" data-add="${s.id}">Add</button>`}</div></div>`).join("")
+        || `<p class="empty">${S.loaded.songs?"No songs are Comfortable or better here yet. Tick the box above to include songs in progress.":"Loading…"}</p>`}</div></div>
+    <div class="panel"><h2>Setlist</h2>
+      <input type="text" id="setName" placeholder="Name this set, e.g. Backyard BBQ" aria-label="Setlist name" value="${esc(ui.setName)}">
+      <div class="summary"><span>Songs <b>${items.length}</b></span><span>Run time <b>${fmt(total)}</b>${missing?` (+${missing} without a length)`:""}</span></div>
+      <div class="tools"><button type="button" id="copySet">Copy setlist</button><button type="button" id="clearSet">Clear</button></div>
+      <ol class="set">${items.map((s,i)=>`<li><div style="min-width:0"><div class="t">${esc(s.title)}</div><div class="a">${esc(s.artist)}${s.len?" · "+esc(s.len):""}</div></div>
+        <div class="mini"><button type="button" data-up="${i}" aria-label="Move up" ${i?"":"disabled"}>↑</button><button type="button" data-down="${i}" aria-label="Move down" ${i<items.length-1?"":"disabled"}>↓</button><button type="button" data-rm="${i}" aria-label="Remove ${esc(s.title)}">✕</button></div></li>`).join("")}</ol>
+      ${items.length?"":`<p class="empty">Add songs from the list.</p>`}</div></div>`);
+}
+
+/* ---------- shell ---------- */
+function renderTabs(){
+  document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected", b.dataset.tab===ui.tab));
+  ["discover","library","setlist"].forEach(t=>$("v-"+t).hidden = t!==ui.tab);
+}
+function renderAll(){
+  renderHeader(); renderTabs();
+  if(ui.tab==="discover") renderDiscover(); else if(ui.tab==="library") renderLibrary(); else renderSetlist();
+  saveUI();
+}
+function status(text, kind){ $("statusText").textContent = text; $("dot").className = "dot " + (kind||""); }
+function notice(html, bad){ const n=$("notice"); if(!html){n.hidden=true;return} n.className="notice"+(bad?" bad":""); n.innerHTML=html; n.hidden=false; }
+function explain(err, what){
+  const code = err && err.code;
+  const msgs = {
+    needs_reauth: "Your Google Sheets sign-in expired. Reconnect Google Sheets in claude.ai Settings → Connectors, then press Refresh.",
+    server_not_connected: "Google Sheets isn't connected. Add it in claude.ai Settings → Connectors, then press Refresh.",
+    selection_required: "You have more than one Google Sheets connector. Choose one when claude.ai asks, then press Refresh.",
+    not_in_manifest: "Google Sheets access is turned off for this page. Turn it on from this artifact's Permissions menu.",
+    approval_required: "This page needs your OK to use Google Sheets. Press Refresh and choose Allow.",
+    blocked_by_policy: "Your organization blocks this Google Sheets action.",
+    server_unavailable: "Google Sheets didn't answer. Try Refresh in a moment.",
+    tool_error: "Google Sheets refused the request: " + esc(err && err.message)
+  };
+  const text = msgs[code] || ("Something went wrong talking to Google Sheets" + (code? ` (${esc(code)})`:"") + ".");
+  if(what==="save") notice("Couldn't save. " + text + (["server_unavailable","upstream_error"].includes(code)?" Check the sheet before trying again; the change may have gone through.":""), true);
+  else notice(text, true);
+  status(what==="save"? "Save failed" : "Not connected", "bad");
+}
+function refresh(k){ mcp && mcp.invalidate(SERVER, "get_values", {spreadsheetId:SHEET_ID, range:RANGES[k]}).catch(()=>{}); }
+function watchAll(){
+  Object.keys(RANGES).forEach(k=>{
+    if(unwatch[k]) unwatch[k]();
+    unwatch[k] = mcp.watchTool(SERVER, "get_values", {spreadsheetId:SHEET_ID, range:RANGES[k]}, ev=>{
+      if(ev.type==="data"){
+        S[k] = PARSE[k](ev.result.payload && ev.result.payload.values); S.loaded[k]=true; delete S.errors[k];
+        if(Object.keys(RANGES).every(x=>S.loaded[x])){
+          notice(""); const when = ev.result.cache? new Date(ev.result.cache.storedAt) : new Date();
+          status(`${S.songs.length} songs · synced ${when.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"})}`, "ok");
+        }
+        if(!editing) renderAll(); else renderHeader();
+      } else {
+        S.errors[k] = ev.error; explain(ev.error, "load");
+        if(["needs_reauth","server_not_connected","not_in_manifest","blocked_by_policy","approval_required","selection_required"].includes(ev.error?.code)){ S[k]=[]; S.loaded[k]=false; renderAll(); }
+      }
+    }, {cache:{staleTime:60000, gcTime:86400000}, refetchInterval:300000});
+  });
+}
+
+document.addEventListener("click", async e=>{
+  const t = e.target.closest("button"); if(!t) return;
+  if(t.dataset.tab){ ui.tab=t.dataset.tab; editing=null; renderAll(); return; }
+  if(t.dataset.crowd!==undefined && t.classList.contains("meter")){ ui.crowd=t.dataset.crowd; downMode=null; learnOpen=false; lastVote=null; if(ui.tab!=="discover") ui.tab="discover"; renderAll(); return; }
+  // discover
+  if(t.hasAttribute("data-deal")){ deal(false); return; }
+  if(t.hasAttribute("data-stop")){ dealing?.ctl.abort(); return; }
+  if(t.hasAttribute("data-learn")){ learnOpen=true; renderDiscover(); return; }
+  if(t.dataset.vote==="down"){ downMode="ask"; renderDiscover(); return; }
+  if(t.dataset.vote){ vote(t.dataset.vote); return; }
+  if(t.hasAttribute("data-notmine")){ vote("not_mine"); return; }
+  if(t.hasAttribute("data-wrongcrowd")){ downMode="pick"; renderDiscover(); return; }
+  if(t.hasAttribute("data-downcancel")){ downMode=null; renderDiscover(); return; }
+  if(t.dataset.wrong!==undefined){ vote("wrong", t.dataset.wrong || null); return; }
+  if(t.hasAttribute("data-newcrowd")){
+    const name = $("newCrowd").value, desc = $("newCrowdDesc").value; if(!name.trim()){ $("newCrowd").focus(); return; }
+    t.disabled = true;
+    try{ const c = await addCrowd(name, desc); if(c) vote("wrong", c.name); }catch(err){ explain(err,"save"); t.disabled=false; }
+    return;
+  }
+  if(t.dataset.reason && lastVote){
+    lastVote.note = t.dataset.reason; renderDiscover();
+    if(lastVote.row) mcp.callTool(SERVER, "update_values", {spreadsheetId:SHEET_ID, range:`Events!I${lastVote.row}`, values:[[txt(lastVote.note)]]}).then(()=>refresh("events")).catch(err=>explain(err,"save"));
+    return;
+  }
+  // library
+  if(t.dataset.edit){ const id=+t.dataset.id; editing = editing&&editing.id===id&&editing.kind===t.dataset.edit ? null : {id, kind:t.dataset.edit}; renderLibrary(); return; }
+  if(t.hasAttribute("data-cancel")){ editing=null; renderLibrary(); return; }
+  if(t.dataset.save){ const s=S.songs.find(x=>x.id===+t.dataset.id); if(s && s.row) saveEditor(t.dataset.save, s, t); return; }
+  // setlist
+  if(t.dataset.add){ ui.setIds.push(+t.dataset.add); renderAll(); return; }
+  const i = +(t.dataset.up ?? t.dataset.down ?? t.dataset.rm);
+  if(t.dataset.up){ [ui.setIds[i-1],ui.setIds[i]]=[ui.setIds[i],ui.setIds[i-1]]; renderAll(); return; }
+  if(t.dataset.down){ [ui.setIds[i+1],ui.setIds[i]]=[ui.setIds[i],ui.setIds[i+1]]; renderAll(); return; }
+  if(t.dataset.rm!==undefined){ ui.setIds.splice(i,1); renderAll(); return; }
+  if(t.id==="clearSet"){ ui.setIds=[]; renderAll(); return; }
+  if(t.id==="copySet"){
+    const items = ui.setIds.map(id=>S.songs.find(s=>s.id===id)).filter(Boolean);
+    const text = (ui.setName? ui.setName+"\n":"") + items.map((s,i)=>`${i+1}. ${s.title} – ${s.artist}${s.len?" ("+s.len+")":""}`).join("\n");
+    try{ await navigator.clipboard.writeText(text); t.textContent="Copied"; setTimeout(()=>{ if(t.isConnected) t.textContent="Copy setlist" },1500); }
+    catch(err){ notice(`Copy isn't allowed here. Select the text below and copy it yourself:<pre style="white-space:pre-wrap;margin:8px 0 0">${esc(text)}</pre>`); }
+    return;
+  }
+  if(t.id==="refresh" && mcp){ status("Refreshing…","warn"); await mcp.invalidate(SERVER, "get_values").catch(()=>{}); watchAll(); }
+});
+document.addEventListener("change", e=>{
+  const t = e.target;
+  if(t.dataset.status){ const s=S.songs.find(x=>x.id===+t.dataset.status); if(s && s.row) setStatus(s, t.value); return; }
+  if(t.id==="libCrowd"){ ui.libCrowd=t.value; renderLibrary(); saveUI(); }
+  if(t.id==="libStatus"){ ui.libStatus=t.value; renderLibrary(); saveUI(); }
+  if(t.id==="setCrowd"){ ui.setCrowd=t.value; renderSetlist(); saveUI(); }
+  if(t.id==="showAll"){ ui.showAll=t.checked; renderSetlist(); saveUI(); }
+});
+document.addEventListener("input", e=>{
+  if(e.target.id==="libQ") renderLibrary();
+  if(e.target.id==="setName"){ ui.setName=e.target.value; saveUI(); }
+});
+
+renderAll();
+(async ()=>{
+  const [m, s] = await Promise.all([
+    window.claude ? window.claude.use("mcp").catch(()=>null) : null,
+    window.claude ? window.claude.use("sample").catch(()=>null) : null
+  ]);
+  mcp = m; sample = s;
+  if(!mcp){ status("Google Sheets unavailable here","bad"); notice("This view can't reach your Google Sheets connector. Open the page in claude.ai while signed in to see your songs."); renderAll(); return; }
+  watchAll();
+})();
+</script>
