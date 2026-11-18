@@ -19,7 +19,7 @@ This is a single-context repo:
 ├── docs/adr/
 │   ├── 0001-example-decision.md
 │   └── 0002-another-decision.md
-├── crowd-setlists.html
+├── packages/artifact/crowd-setlists.html
 └── README.md
 ```
 

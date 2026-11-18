@@ -27,7 +27,7 @@ pnpm typecheck
 pnpm test
 ```
 
-Each script runs `turbo run <task>` across all packages. Turborepo caches results, so unchanged packages replay instantly. To run only what a change affects (and its dependants), add `--affected`:
+Each script runs `turbo run <task>` across all packages. Turborepo caches results, so unchanged packages replay instantly. To run only what a change affects (and its dependants), add `--affected`. Packages that an affected package depends on are built first, because Turborepo's `build` task depends on `^build`:
 
 ```bash
 pnpm exec turbo run build lint typecheck test --affected
