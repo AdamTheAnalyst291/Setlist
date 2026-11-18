@@ -1,0 +1,219 @@
+name: Infrastructure
+
+# Terraform for the Azure environments. Pull requests that touch infra/ get a Dev plan
+# posted as a comment; merging to main applies it. Jobs sign in to Azure with OIDC as
+# the Dev deploy identity, which trusts only this repository's `dev` GitHub Environment.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - infra/**
+      - .github/workflows/infrastructure.yml
+  push:
+    branches: [main]
+    paths:
+      - infra/**
+      - .github/workflows/infrastructure.yml
+
+permissions:
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TERRAFORM_VERSION: 1.17.2
+
+jobs:
+  check:
+    name: Terraform format, validate and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - run: terraform fmt -check -recursive -diff infra
+
+      - name: Validate every root
+        run: |
+          for dir in infra/bootstrap infra/environments/dev infra/modules/environment; do
+            echo "::group::$dir"
+            terraform -chdir="$dir" init -backend=false
+            terraform -chdir="$dir" validate
+            echo "::endgroup::"
+          done
+
+      # Plan-only tests with mocked providers; they need no Azure sign-in.
+      - run: terraform -chdir=infra/modules/environment test
+
+  plan-dev:
+    name: Plan Dev
+    needs: check
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: dev
+    concurrency:
+      group: terraform-dev
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # OIDC sign-in to Azure
+      pull-requests: write # the plan comment
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_deploy_identity_object_id: ${{ vars.AZURE_PRINCIPAL_ID }}
+    defaults:
+      run:
+        working-directory: infra/environments/dev
+    steps:
+      - name: Check that Azure sign-in is set up
+        id: configured
+        working-directory: .
+        env:
+          STATE_ACCOUNT: ${{ vars.TF_STATE_STORAGE_ACCOUNT }}
+        run: |
+          if [ -z "$ARM_CLIENT_ID" ] || [ -z "$STATE_ACCOUNT" ]; then
+            echo "::warning::The dev GitHub Environment has no Azure variables yet, so no plan was made. Run infra/bootstrap first (see infra/README.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.configured.outputs.ready == 'true'
+
+      - uses: hashicorp/setup-terraform@v3
+        if: steps.configured.outputs.ready == 'true'
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: terraform init
+        if: steps.configured.outputs.ready == 'true'
+        run: >
+          terraform init
+          -backend-config="resource_group_name=${{ vars.TF_STATE_RESOURCE_GROUP }}"
+          -backend-config="storage_account_name=${{ vars.TF_STATE_STORAGE_ACCOUNT }}"
+          -backend-config="subscription_id=${{ vars.AZURE_SUBSCRIPTION_ID }}"
+
+      - name: terraform plan
+        id: plan
+        if: steps.configured.outputs.ready == 'true'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          terraform plan -no-color -lock-timeout=5m -out=tfplan 2>&1 | tee plan.txt
+
+      - name: Post the plan on the pull request
+        if: steps.configured.outputs.ready == 'true'
+        uses: actions/github-script@v7
+        env:
+          PLAN_OUTCOME: ${{ steps.plan.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- terraform-plan-dev -->';
+            let plan = fs.readFileSync('infra/environments/dev/plan.txt', 'utf8');
+            const limit = 60000;
+            if (plan.length > limit) plan = '…(truncated, see the job log)\n' + plan.slice(-limit);
+            const ok = process.env.PLAN_OUTCOME === 'success';
+            const summary = (plan.match(/^(Plan:.*|No changes\..*)$/m) || [])[0] || (ok ? 'Plan finished.' : 'Plan failed.');
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              marker,
+              `### Terraform plan for Dev ${ok ? '✅' : '❌'}`,
+              '',
+              `**${summary}** · commit ${context.payload.pull_request.head.sha.slice(0, 7)} · [run](${run})`,
+              '',
+              '<details><summary>Full plan</summary>',
+              '',
+              '```',
+              plan,
+              '```',
+              '</details>',
+            ].join('\n');
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find((c) => c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body });
+            }
+
+      - name: Fail if the plan failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+  apply-dev:
+    name: Apply Dev
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: dev
+    concurrency:
+      group: terraform-dev
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # OIDC sign-in to Azure
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_deploy_identity_object_id: ${{ vars.AZURE_PRINCIPAL_ID }}
+    defaults:
+      run:
+        working-directory: infra/environments/dev
+    steps:
+      - name: Check that Azure sign-in is set up
+        id: configured
+        working-directory: .
+        env:
+          STATE_ACCOUNT: ${{ vars.TF_STATE_STORAGE_ACCOUNT }}
+        run: |
+          if [ -z "$ARM_CLIENT_ID" ] || [ -z "$STATE_ACCOUNT" ]; then
+            echo "::warning::The dev GitHub Environment has no Azure variables yet, so nothing was applied. Run infra/bootstrap first (see infra/README.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.configured.outputs.ready == 'true'
+
+      - uses: hashicorp/setup-terraform@v3
+        if: steps.configured.outputs.ready == 'true'
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: terraform init
+        if: steps.configured.outputs.ready == 'true'
+        run: >
+          terraform init
+          -backend-config="resource_group_name=${{ vars.TF_STATE_RESOURCE_GROUP }}"
+          -backend-config="storage_account_name=${{ vars.TF_STATE_STORAGE_ACCOUNT }}"
+          -backend-config="subscription_id=${{ vars.AZURE_SUBSCRIPTION_ID }}"
+
+      - name: terraform plan
+        if: steps.configured.outputs.ready == 'true'
+        run: terraform plan -no-color -lock-timeout=5m -out=tfplan
+
+      - name: terraform apply
+        if: steps.configured.outputs.ready == 'true'
+        run: terraform apply -no-color -lock-timeout=5m tfplan
+
+      - name: Outputs
+        if: steps.configured.outputs.ready == 'true'
+        run: terraform output -no-color >> "$GITHUB_STEP_SUMMARY"
