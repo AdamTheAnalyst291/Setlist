@@ -113,7 +113,8 @@ jobs:
           swa=$(one "web app" $(az staticwebapp list -g "$RESOURCE_GROUP" --query "[?starts_with(name, 'swa-setlist-dev-')].name" -o tsv))
           func=$(one "Functions app" $(az functionapp list -g "$RESOURCE_GROUP" --query "[?starts_with(name, 'func-setlist-dev-')].name" -o tsv))
           web_host=$(az staticwebapp show -g "$RESOURCE_GROUP" -n "$swa" --query defaultHostname -o tsv)
-          api_host=$(az functionapp show -g "$RESOURCE_GROUP" -n "$func" --query defaultHostName -o tsv)
+          api_host=$(az functionapp show -g "$RESOURCE_GROUP" -n "$func" --query "properties.defaultHostName || defaultHostName" -o tsv)
+          [ -n "$web_host" ] && [ -n "$api_host" ] || { echo "::error::Could not read the web app or API hostname"; exit 1; }
           {
             echo "swa=$swa"
             echo "func=$func"
