@@ -121,13 +121,30 @@ jobs:
             echo "api_url=https://$api_host"
           } >> "$GITHUB_OUTPUT"
 
+      # `az functionapp deploy` and `config-zip` don't work for Flex Consumption here: the
+      # first uploads the zip as application/octet-stream and gets HTTP 415, and the second
+      # fails its host-key health check. So post the zip to the publish endpoint directly
+      # (it must be application/zip), then wait for the deployment to finish.
       - name: Deploy the API
         env:
           FUNCTION_APP: ${{ steps.resources.outputs.func }}
-        run: >
-          az functionapp deploy --type zip
-          -g "$RESOURCE_GROUP" -n "$FUNCTION_APP"
-          --src-path build/api.zip
+        run: |
+          set -euo pipefail
+          scm="https://$FUNCTION_APP.scm.azurewebsites.net"
+          token=$(az account get-access-token --query accessToken -o tsv)
+          echo "::add-mask::$token"
+          location=$(curl -sS -f -D - -o /dev/null -X POST             -H "Authorization: Bearer $token" -H "Content-Type: application/zip"             --data-binary @build/api.zip "$scm/api/publish?type=zip" | tr -d '' | awk -F': ' 'tolower($1)=="location" {print $2}')
+          [ -n "$location" ] || { echo "::error::The publish endpoint returned no deployment to follow"; exit 1; }
+          for attempt in $(seq 1 36); do
+            status=$(curl -sS -f -H "Authorization: Bearer $token" "$location" | jq -r '.status')
+            echo "Deployment status: $status (attempt $attempt)"
+            case "$status" in
+              4) exit 0 ;;                              # succeeded
+              3) echo "::error::The API deployment failed"; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::The API deployment did not finish in time"; exit 1
 
       - name: Deploy the web app
         env:
