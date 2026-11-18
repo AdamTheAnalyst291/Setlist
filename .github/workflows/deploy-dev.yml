@@ -133,7 +133,10 @@ jobs:
           scm="https://$FUNCTION_APP.scm.azurewebsites.net"
           token=$(az account get-access-token --query accessToken -o tsv)
           echo "::add-mask::$token"
-          location=$(curl -sS -f -D - -o /dev/null -X POST             -H "Authorization: Bearer $token" -H "Content-Type: application/zip"             --data-binary @build/api.zip "$scm/api/publish?type=zip" | tr -d '' | awk -F': ' 'tolower($1)=="location" {print $2}')
+          headers=$(curl -sS -f -D - -o /dev/null -X POST \
+            -H "Authorization: Bearer $token" -H "Content-Type: application/zip" \
+            --data-binary @build/api.zip "$scm/api/publish?type=zip")
+          location=$(printf '%s\n' "$headers" | tr -d '\r' | awk -F': ' 'tolower($1)=="location" {print $2}')
           [ -n "$location" ] || { echo "::error::The publish endpoint returned no deployment to follow"; exit 1; }
           for attempt in $(seq 1 36); do
             status=$(curl -sS -f -H "Authorization: Bearer $token" "$location" | jq -r '.status')
