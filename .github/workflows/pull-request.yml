@@ -1,0 +1,45 @@
+name: Pull request
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main] # warms the Turborepo cache that pull requests restore
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Lint, typecheck and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Turborepo --affected compares against the base branch
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Restore Turborepo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-
+
+      - run: pnpm install --frozen-lockfile
+
+      # --affected runs only packages changed against the base branch, plus their dependants.
+      - run: pnpm exec turbo run build lint typecheck test --affected
+        env:
+          TURBO_CACHE_DIR: .turbo/cache
+          TURBO_SCM_BASE: origin/${{ github.base_ref || 'main' }}
