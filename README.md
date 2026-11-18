@@ -10,7 +10,7 @@ A TypeScript monorepo using pnpm workspaces and Turborepo.
 
 | Path | What it is |
 |---|---|
-| `apps/web` | React (Vite) web app, a stub for now |
+| `apps/web` | React (Vite) web app. Its page shows the API's health, read from the address in `config.json` |
 | `apps/api` | API on Azure Functions (Node), with a `GET /api/health` endpoint |
 | `packages/shared` | Types shared by the web app and API |
 | `packages/artifact` | The original claude.ai page. It is published by hand and has no scripts, so no pipeline runs it |
@@ -145,3 +145,9 @@ Edit `packages/artifact/crowd-setlists.html`, then publish it to the artifact UR
 - Badges
 - Saving setlists to the sheet
 - A standalone app that imports these tabs as they are
+
+## Deploying to Dev
+
+The `Deploy Dev` workflow runs on every merge to `main` that touches app code. It builds the web app and API once and uploads them as the artifact `setlist-build-<commit>` (kept 90 days; later Promotions download it instead of rebuilding). It then deploys the API zip to the Functions app and the web app to Static Web Apps, and fails unless the API's health, the web app and CORS all check out. It signs in with OIDC; the Static Web Apps deployment token is fetched with the Azure CLI during the run and never stored. Why the API is a separate Functions app: [ADR 0001](docs/adr/0001-api-runs-as-a-separate-functions-app.md).
+
+The web build has no API address in it. Each deploy writes `config.json` beside it; locally, `apps/web/public/config.json` points at `http://localhost:7071`.
