@@ -26,7 +26,13 @@ terraform {
 
 # Credentials come from ARM_* environment variables (OIDC in GitHub Actions).
 provider "azurerm" {
-  features {}
+  features {
+    key_vault {
+      # Purging needs a subscription-wide permission the deploy identity doesn't have.
+      # A deleted vault stays soft-deleted for 7 days, then Azure purges it.
+      purge_soft_delete_on_destroy = false
+    }
+  }
 
   # The deploy identity can't register providers at subscription scope;
   # infra/bootstrap registers the ones Setlist needs.
