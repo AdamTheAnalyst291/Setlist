@@ -1,0 +1,6 @@
+{
+  "name": "@setlist/artifact",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The original claude.ai artifact page. Published by hand; has no scripts so no pipeline runs it."
+}

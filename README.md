@@ -2,7 +2,40 @@
 
 A tool for a solo acoustic guitar player: find the songs each crowd wants to hear, learn them, track practice, and build setlists.
 
-The prototype is a single page, [`crowd-setlists.html`](crowd-setlists.html), published as a claude.ai artifact at <https://claude.ai/artifact/5PwVhu5KTpTwiLMnSYhvyk>. It uses the [Crowd Setlists Google Sheet](https://docs.google.com/spreadsheets/d/1lKH0HdpqFFAiq90JxJMtxhMh2hSE2st72W0oayqNxSM/edit) as its database.
+The prototype is a single page, [`crowd-setlists.html`](packages/artifact/crowd-setlists.html), published as a claude.ai artifact at <https://claude.ai/artifact/5PwVhu5KTpTwiLMnSYhvyk>. It uses the [Crowd Setlists Google Sheet](https://docs.google.com/spreadsheets/d/1lKH0HdpqFFAiq90JxJMtxhMh2hSE2st72W0oayqNxSM/edit) as its database.
+
+## Repository layout
+
+A TypeScript monorepo using pnpm workspaces and Turborepo.
+
+| Path | What it is |
+|---|---|
+| `apps/web` | React (Vite) web app, a stub for now |
+| `apps/api` | API on Azure Functions (Node), with a `GET /api/health` endpoint |
+| `packages/shared` | Types shared by the web app and API |
+| `packages/artifact` | The original claude.ai page. It is published by hand and has no scripts, so no pipeline runs it |
+
+## Install, build and test
+
+You need Node 24 and pnpm 12.
+
+```bash
+pnpm install
+pnpm build
+pnpm lint
+pnpm typecheck
+pnpm test
+```
+
+Each script runs `turbo run <task>` across all packages. Turborepo caches results, so unchanged packages replay instantly. To run only what a change affects (and its dependants), add `--affected`:
+
+```bash
+pnpm exec turbo run build lint typecheck test --affected
+```
+
+## Pull request checks
+
+Every pull request to `main` runs the `Pull request` workflow: lint, typecheck and tests, limited to affected packages and with Turborepo's cache restored between runs.
 
 ## How the page works
 
@@ -96,7 +129,7 @@ Both Sheets write tools parse input the way the Sheets UI does, so the page puts
 
 ## Publishing
 
-Edit `crowd-setlists.html`, then publish it to the artifact URL above with the same capabilities:
+Edit `packages/artifact/crowd-setlists.html`, then publish it to the artifact URL above with the same capabilities:
 
 ```json
 {"mcp": {"servers": [{"server": "Google Sheets", "tools": ["get_values", "update_values", "append_values"]}]}, "sample": {}}
