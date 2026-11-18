@@ -1,3 +1,53 @@
+# Notes for Claude
+
+## Who this is for
+
+Adam plays solo acoustic guitar. This repo is **Crowd Setlists**: find the songs each Crowd wants to hear, learn them, track practice and build Setlists. It is also his practice project for DevOps and data engineering (Dev, UAT and Prod on Azure). The spec is issue #3. Use the terms in `GLOSSARY.md` (Crowd, not "audience"; Song, not "track").
+
+His taste, which the suggestion prompt also carries (`TASTE` in `packages/artifact/crowd-setlists.html`):
+
+- Lyrics and storytelling, recognizable guitar parts, singalong or mellow, old and new.
+- Favorites: Fast Car (Tracy Chapman), The Boxer (Simon & Garfunkel), Wish You Were Here (Pink Floyd), Between the Bars (Elliott Smith), Silver Lining (Mt. Joy), The Stable Song (Gregory Alan Isakov), Your Best American Girl (Mitski).
+- Not a strong singer: lower range, conversational delivery, or a chorus the crowd carries is easier.
+
+## Where the data lives
+
+There are two Google Sheets. Reuse them; don't create new sheets, tabs or files for song data.
+
+- **Crowd Setlists** (<https://docs.google.com/spreadsheets/d/1lKH0HdpqFFAiq90JxJMtxhMh2hSE2st72W0oayqNxSM/edit>): the database the artifact page reads and writes today. Tabs: Songs, Crowds, Events, Practice, Lists. Columns are found by header name; the README's "Sheet layout" section is the reference.
+- **Set List** (<https://docs.google.com/spreadsheets/d/1prYQxPTo1p_5AKHKXBl_kPHUUdDCWaLC1Ka3g15Wy0o/edit>): Adam's original sheet. Tabs: Songs, Practice Log, Stats, Lists. On Songs, column I (`Audience`) sorts songs into crowds: Campfire Singalong, Bar / Party, Family & Classics, Quiet Listening, Road Trip / Upbeat, Indie Crowd, 90s & 2000s Throwback.
+
+The artifact page is <https://claude.ai/artifact/5PwVhu5KTpTwiLMnSYhvyk>, built from `packages/artifact/crowd-setlists.html` and published by hand (see "Publishing" in the README). Per the spec, the sheet becomes a read-only archive once Prod imports it.
+
+## Repo layout and commands
+
+TypeScript monorepo, pnpm workspaces and Turborepo. Node 24, pnpm 12.
+
+| Path | What it is |
+|---|---|
+| `apps/web` | React (Vite) web app, a stub for now |
+| `apps/api` | Azure Functions (Node) API with `GET /api/health` |
+| `packages/shared` | Types shared by web and API |
+| `packages/artifact` | The claude.ai page. No scripts; no pipeline runs it |
+
+```bash
+pnpm install
+pnpm build        # each script is turbo run <task> across all packages
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm exec turbo run build lint typecheck test --affected   # what CI runs on pull requests
+pnpm --filter @setlist/api exec vitest run src/functions/health.test.ts   # one test file
+```
+
+CI is `.github/workflows/pull-request.yml` (lint, typecheck, test on affected packages).
+
+## Working rules
+
+- Reuse what exists: the sheets above, the artifact, and existing files. Don't make a new sheet, page or file when one already does the job.
+- If a tool, command or connector call fails, report the exact error message. Don't guess at the cause.
+- Test before saying something doesn't work. Before calling a connector or tool unavailable, search for it, load it and try it.
+
 ## Agent skills
 
 ### Issue tracker
