@@ -68,7 +68,7 @@ run "api_is_a_flex_consumption_node_24_app_with_a_managed_identity" {
   }
 
   assert {
-    condition     = contains(azurerm_function_app_flex_consumption.api.site_config[0].cors[0].allowed_origins, "http://localhost:5173")
+    condition     = contains(azapi_resource_action.api_cors.body.properties.cors.allowedOrigins, "http://localhost:5173")
     error_message = "Dev's API must accept calls from the local Vite server."
   }
 }
@@ -123,7 +123,7 @@ run "non_dev_api_does_not_accept_localhost" {
   }
 
   assert {
-    condition     = !contains(azurerm_function_app_flex_consumption.api.site_config[0].cors[0].allowed_origins, "http://localhost:5173")
+    condition     = !contains(azapi_resource_action.api_cors.body.properties.cors.allowedOrigins, "http://localhost:5173")
     error_message = "Only Dev may accept calls from localhost."
   }
 }

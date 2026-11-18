@@ -10,7 +10,7 @@ Terraform for Setlist's Azure environments. Only Dev exists so far; UAT and Prod
 
 ## What each environment gets
 
-All in the resource group `rg-setlist-<env>`, in `eastus2`:
+All in the resource group `rg-setlist-<env>`, in `centralus`. This subscription can't create Azure SQL servers in `eastus2`, `eastus`, `westus`, `westus2` or `northcentralus` ("Provisioning is restricted in this region"). `centralus` has SQL, Flex Consumption and Static Web Apps Free. The resource groups and state account were created in `eastus2`, which holds only their metadata.
 
 - **Web app:** Static Web Apps on the Free plan. The Free plan can't link a separate Functions app, so the web app calls the API's own hostname, and the API allows it with CORS.
 - **API:** a Linux Functions app on Flex Consumption (Node 24), with a system-assigned managed identity. It reaches its storage account with that identity. No always-ready instances, and at most 40 instances.
@@ -40,7 +40,7 @@ Run this from a machine signed in to the Azure CLI as an Owner of the Setlist su
 3. Review the plan, then apply it. It creates:
    - registrations for the resource providers Setlist uses
    - `rg-setlist-tfstate` with a storage account (Standard LRS, Entra ID access only, versioning and 7-day soft delete) and one `tfstate-<env>` container per environment
-   - per environment: `rg-setlist-<env>`, and an app registration `setlist-github-<env>` whose only credential is a federated credential for `repo:AdamTheAnalyst291/Setlist:environment:<env>`
+   - per environment: `rg-setlist-<env>`, and an app registration `setlist-github-<env>` whose only credential is a federated credential for `repo:AdamTheAnalyst291@225034465/Setlist@1460767630:environment:<env>`. GitHub puts immutable owner and repository IDs in this repository's OIDC subject, so the trust can't pass to a renamed or recreated repo
    - role assignments for that identity: Contributor on its resource group; Role Based Access Control Administrator on its resource group, limited to granting Storage Blob Data Owner and Key Vault Secrets User; Storage Blob Data Contributor on its own state container
    - the `setlist-monthly` budget on the subscription, $5 a month, emailing at 50% and 100% of actual spend and 100% of forecast
 

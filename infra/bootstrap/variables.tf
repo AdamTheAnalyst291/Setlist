@@ -9,7 +9,7 @@ variable "tenant_id" {
 }
 
 variable "location" {
-  description = "Region for the state account and resource groups. Keep it the same as the environments' location."
+  description = "Region for the state account and resource groups. A resource group's region only holds its metadata, so it may differ from the resources inside it; changing it replaces the groups."
   type        = string
   default     = "eastus2"
 }
@@ -18,6 +18,12 @@ variable "github_repository" {
   description = "owner/name of the repository whose GitHub Environments may sign in."
   type        = string
   default     = "AdamTheAnalyst291/Setlist"
+}
+
+variable "github_oidc_subject_prefix" {
+  description = "Start of the `sub` claim in this repository's GitHub OIDC tokens. The repository uses immutable IDs (owner@id/name@id), so renaming it can't hand its trust to another repo. Read it with: gh api repos/OWNER/REPO/actions/oidc/customization/sub (sub_claim_prefix)."
+  type        = string
+  default     = "repo:AdamTheAnalyst291@225034465/Setlist@1460767630"
 }
 
 variable "environments" {
