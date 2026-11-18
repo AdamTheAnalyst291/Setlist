@@ -5,9 +5,11 @@
 data "azurerm_client_config" "current" {}
 
 locals {
-  # Globally unique names need a suffix. Deriving it from the subscription and
-  # environment keeps it stable across runs without storing a random value.
-  suffix = substr(sha1("${data.azurerm_client_config.current.subscription_id}-${var.environment}"), 0, 6)
+  # Globally unique names need a suffix. Deriving it from the subscription, environment
+  # and location keeps it stable across runs without storing a random value. The
+  # location is included because Azure keeps a deleted or failed resource's name tied
+  # to its old region for a while, so a move to another region needs fresh names.
+  suffix = substr(sha1("${data.azurerm_client_config.current.subscription_id}-${var.environment}-${var.location}"), 0, 6)
 
   tags = {
     app         = "setlist"
@@ -22,7 +24,7 @@ locals {
 # --- Web app -----------------------------------------------------------------
 
 resource "azurerm_static_web_app" "web" {
-  name                = "swa-setlist-${var.environment}"
+  name                = "swa-setlist-${var.environment}-${local.suffix}"
   resource_group_name = var.resource_group_name
   location            = var.location
   sku_tier            = "Free"

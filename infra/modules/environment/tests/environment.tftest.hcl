@@ -137,3 +137,31 @@ run "rejects_unknown_environment_names" {
 
   expect_failures = [var.environment]
 }
+
+# Azure keeps a deleted or failed resource's name tied to its old region for a while,
+# so moving an environment to another region must give it fresh names.
+run "names_in_centralus" {
+  command = plan
+
+  variables {
+    location = "centralus"
+  }
+}
+
+run "names_change_with_location" {
+  command = plan
+
+  variables {
+    location = "westus3"
+  }
+
+  assert {
+    condition = alltrue([
+      output.key_vault_name != run.names_in_centralus.key_vault_name,
+      output.sql_server_name != run.names_in_centralus.sql_server_name,
+      output.function_app_name != run.names_in_centralus.function_app_name,
+      output.static_web_app_name != run.names_in_centralus.static_web_app_name,
+    ])
+    error_message = "Globally unique names must change when the location changes."
+  }
+}
