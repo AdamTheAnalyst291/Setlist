@@ -2,7 +2,7 @@
 
 Static Web Apps can host an API of its own ("managed functions") next to the web app, and that would be one resource to deploy instead of two. We run the API as a separate Azure Functions app on the Flex Consumption plan instead.
 
-The reason is the database. The API must reach Azure SQL with a managed identity, so that no database password exists (see the spec, #3). The built-in functions of the Static Web Apps Free plan can't use a managed identity, and the Free plan can't link a separate Functions app either. A separate Functions app has a system-assigned identity, which also reads the Anthropic key from Key Vault.
+The reason is the database. The API must reach Azure SQL with a managed identity, so that no database password exists (see the spec, #3). The [Static Web Apps documentation](https://learn.microsoft.com/en-us/azure/static-web-apps/apis-overview) doesn't say that managed functions can use a managed identity, so we can't rely on it for passwordless SQL access. Linking your own Functions app ("bring your own APIs") is a Standard-plan feature, so the Free plan can't link a separate Functions app. Managed functions are also limited to HTTP triggers and a 45-second request limit. A separate Functions app has a system-assigned identity, which also reads the Anthropic key from Key Vault.
 
 ## Consequences
 
