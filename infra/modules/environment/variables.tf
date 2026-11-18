@@ -31,3 +31,9 @@ variable "function_maximum_instance_count" {
   type        = number
   default     = 40
 }
+
+variable "key_vault_purge_protection" {
+  description = "Stops a deleted Key Vault from being purged before its retention ends. Off for Dev so it can be torn down and rebuilt; turn it on for Prod. Once on, it can't be turned off."
+  type        = bool
+  default     = false
+}

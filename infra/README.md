@@ -67,8 +67,10 @@ To add UAT and Prod later, set `environments = ["dev", "uat", "prod"]` in `terra
 The `Infrastructure` workflow runs when a change touches `infra/` or the workflow itself:
 
 - **Every pull request:** `terraform fmt`, `validate` on every root, and the module's tests (`terraform test`, with mocked providers).
-- **Pull requests:** a Dev plan, posted as a comment that is updated on each push. Until the bootstrap has run, this job warns and skips the plan.
+- **Pull requests:** a Dev plan, posted as a comment that is updated on each push.
 - **Merge to `main`:** plan and apply Dev.
+
+Until the bootstrap has run and the `dev` Environment has its variables, the plan and apply jobs warn and skip instead of failing.
 
 Both Azure jobs run in the `dev` GitHub Environment and sign in with OIDC, so no Azure key exists anywhere.
 

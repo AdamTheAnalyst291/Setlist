@@ -75,8 +75,10 @@ jobs:
       - name: Check that Azure sign-in is set up
         id: configured
         working-directory: .
+        env:
+          STATE_ACCOUNT: ${{ vars.TF_STATE_STORAGE_ACCOUNT }}
         run: |
-          if [ -z "$ARM_CLIENT_ID" ] || [ -z "${{ vars.TF_STATE_STORAGE_ACCOUNT }}" ]; then
+          if [ -z "$ARM_CLIENT_ID" ] || [ -z "$STATE_ACCOUNT" ]; then
             echo "::warning::The dev GitHub Environment has no Azure variables yet, so no plan was made. Run infra/bootstrap first (see infra/README.md)."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           else
@@ -98,6 +100,7 @@ jobs:
           terraform init
           -backend-config="resource_group_name=${{ vars.TF_STATE_RESOURCE_GROUP }}"
           -backend-config="storage_account_name=${{ vars.TF_STATE_STORAGE_ACCOUNT }}"
+          -backend-config="subscription_id=${{ vars.AZURE_SUBSCRIPTION_ID }}"
 
       - name: terraform plan
         id: plan
@@ -173,22 +176,44 @@ jobs:
       run:
         working-directory: infra/environments/dev
     steps:
+      - name: Check that Azure sign-in is set up
+        id: configured
+        working-directory: .
+        env:
+          STATE_ACCOUNT: ${{ vars.TF_STATE_STORAGE_ACCOUNT }}
+        run: |
+          if [ -z "$ARM_CLIENT_ID" ] || [ -z "$STATE_ACCOUNT" ]; then
+            echo "::warning::The dev GitHub Environment has no Azure variables yet, so nothing was applied. Run infra/bootstrap first (see infra/README.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.configured.outputs.ready == 'true'
 
       - uses: hashicorp/setup-terraform@v3
+        if: steps.configured.outputs.ready == 'true'
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
       - name: terraform init
+        if: steps.configured.outputs.ready == 'true'
         run: >
           terraform init
           -backend-config="resource_group_name=${{ vars.TF_STATE_RESOURCE_GROUP }}"
           -backend-config="storage_account_name=${{ vars.TF_STATE_STORAGE_ACCOUNT }}"
+          -backend-config="subscription_id=${{ vars.AZURE_SUBSCRIPTION_ID }}"
 
-      - run: terraform plan -no-color -lock-timeout=5m -out=tfplan
+      - name: terraform plan
+        if: steps.configured.outputs.ready == 'true'
+        run: terraform plan -no-color -lock-timeout=5m -out=tfplan
 
-      - run: terraform apply -no-color -lock-timeout=5m tfplan
+      - name: terraform apply
+        if: steps.configured.outputs.ready == 'true'
+        run: terraform apply -no-color -lock-timeout=5m tfplan
 
       - name: Outputs
+        if: steps.configured.outputs.ready == 'true'
         run: terraform output -no-color >> "$GITHUB_STEP_SUMMARY"
