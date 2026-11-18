@@ -91,15 +91,33 @@ resource "azurerm_function_app_flex_consumption" "api" {
 
   site_config {
     minimum_tls_version = "1.2"
-
-    # Static Web Apps Free can't link its own Functions app, so the web app calls
-    # the API's own hostname directly.
-    cors {
-      allowed_origins = concat(["https://${azurerm_static_web_app.web.default_host_name}"], local.local_origins)
-    }
   }
 
   tags = local.tags
+
+  lifecycle {
+    # CORS is set by azapi_resource_action.api_cors below.
+    ignore_changes = [site_config[0].cors]
+  }
+}
+
+# Static Web Apps Free can't link its own Functions app, so the web app calls the
+# API's own hostname directly and the API allows that origin. This is a separate
+# PATCH because azurerm fails a first apply when the CORS origins aren't known
+# until the web app exists ("site_config[0].cors: block count changed from 0 to 1").
+resource "azapi_resource_action" "api_cors" {
+  type        = "Microsoft.Web/sites/config@2023-12-01"
+  resource_id = "${azurerm_function_app_flex_consumption.api.id}/config/web"
+  method      = "PATCH"
+
+  body = {
+    properties = {
+      cors = {
+        allowedOrigins     = concat(["https://${azurerm_static_web_app.web.default_host_name}"], local.local_origins)
+        supportCredentials = false
+      }
+    }
+  }
 }
 
 resource "azurerm_role_assignment" "api_storage" {

@@ -139,7 +139,7 @@ resource "azuread_application_federated_identity_credential" "github_environment
   display_name   = "github-${replace(var.github_repository, "/", "-")}-${each.key}"
   description    = "GitHub Actions in ${var.github_repository}, environment ${each.key}"
   issuer         = "https://token.actions.githubusercontent.com"
-  subject        = "repo:${var.github_repository}:environment:${each.key}"
+  subject        = "${var.github_oidc_subject_prefix}:environment:${each.key}"
   audiences      = ["api://AzureADTokenExchange"]
 }
 

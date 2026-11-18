@@ -46,7 +46,7 @@ module "environment" {
 
   environment         = "dev"
   resource_group_name = "rg-setlist-dev"
-  location            = "eastus2"
+  location            = "centralus"
 
   sql_admin = {
     login_username = "setlist-github-dev"
