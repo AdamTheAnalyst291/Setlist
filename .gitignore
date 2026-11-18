@@ -4,3 +4,9 @@ dist
 *.tsbuildinfo
 .env
 local.settings.json
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+tfplan

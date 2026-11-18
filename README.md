@@ -14,6 +14,7 @@ A TypeScript monorepo using pnpm workspaces and Turborepo.
 | `apps/api` | API on Azure Functions (Node), with a `GET /api/health` endpoint |
 | `packages/shared` | Types shared by the web app and API |
 | `packages/artifact` | The original claude.ai page. It is published by hand and has no scripts, so no pipeline runs it |
+| `infra` | Terraform for the Azure environments; see [`infra/README.md`](infra/README.md) |
 
 ## Install, build and test
 
@@ -36,6 +37,8 @@ pnpm exec turbo run build lint typecheck test --affected
 ## Pull request checks
 
 Every pull request to `main` runs the `Pull request` workflow: lint, typecheck and tests, limited to affected packages and with Turborepo's cache restored between runs.
+
+Pull requests that touch `infra/` also run the `Infrastructure` workflow, which checks the Terraform and posts a Dev plan. Merging them applies Dev.
 
 ## How the page works
 
