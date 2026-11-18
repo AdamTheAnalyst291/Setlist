@@ -1,0 +1,3 @@
+{
+  "routes": [{ "route": "/config.json", "headers": { "cache-control": "no-store" } }]
+}

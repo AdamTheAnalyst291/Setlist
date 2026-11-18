@@ -1,0 +1,167 @@
+name: Deploy Dev
+
+# Every merge to main builds the web app and API once, keeps that build as an artifact,
+# and deploys it to Dev. Later Promotions (UAT, Prod) download the same artifact instead
+# of rebuilding. The deploy signs in to Azure with OIDC as the Dev deploy identity; no
+# secret is stored in GitHub, and the Static Web Apps deployment token is fetched at
+# deploy time.
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/**
+      - packages/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - turbo.json
+      - tsconfig.base.json
+      - .github/workflows/deploy-dev.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+env:
+  RESOURCE_GROUP: rg-setlist-dev
+
+jobs:
+  build:
+    name: Build once
+    runs-on: ubuntu-latest
+    outputs:
+      artifact: ${{ steps.name.outputs.artifact }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm exec turbo run build test --filter=@setlist/web --filter=@setlist/api
+
+      # The API ships as a zip holding its compiled code and production dependencies only.
+      # A flat node_modules (no symlinks) keeps the zip self-contained.
+      - name: Package the API
+        run: |
+          pnpm --filter @setlist/api deploy --prod --config.node-linker=hoisted build/api
+          (cd build/api && zip -qr ../api.zip . -x "node_modules/.pnpm/*")
+
+      # The web app is plain static files; each deploy adds its own config.json.
+      - name: Collect the web app
+        run: cp -r apps/web/dist build/web
+
+      - id: name
+        run: echo "artifact=setlist-build-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.name.outputs.artifact }}
+          path: |
+            build/api.zip
+            build/web
+          if-no-files-found: error
+          retention-days: 90
+
+  deploy:
+    name: Deploy to Dev
+    needs: build
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      contents: read
+      id-token: write # OIDC sign-in to Azure
+    steps:
+      - name: Check that Azure sign-in is set up
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+        run: |
+          if [ -z "$AZURE_CLIENT_ID" ]; then
+            echo "::error::The dev GitHub Environment has no Azure variables. Run infra/bootstrap first (see infra/README.md)."
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+          path: build
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # Resource names carry a generated suffix, so look them up in the resource group.
+      - name: Find the Dev resources
+        id: resources
+        run: |
+          set -euo pipefail
+          one() { # one <description> <names...>: exactly one name must match
+            if [ "$#" -ne 2 ]; then echo "::error::Expected exactly one $1 in $RESOURCE_GROUP, found: ${*:2}" >&2; exit 1; fi
+            echo "$2"
+          }
+          swa=$(one "web app" $(az staticwebapp list -g "$RESOURCE_GROUP" --query "[?starts_with(name, 'swa-setlist-dev-')].name" -o tsv))
+          func=$(one "Functions app" $(az functionapp list -g "$RESOURCE_GROUP" --query "[?starts_with(name, 'func-setlist-dev-')].name" -o tsv))
+          web_host=$(az staticwebapp show -g "$RESOURCE_GROUP" -n "$swa" --query defaultHostname -o tsv)
+          api_host=$(az functionapp show -g "$RESOURCE_GROUP" -n "$func" --query defaultHostName -o tsv)
+          {
+            echo "swa=$swa"
+            echo "func=$func"
+            echo "web_url=https://$web_host"
+            echo "api_url=https://$api_host"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Deploy the API
+        env:
+          FUNCTION_APP: ${{ steps.resources.outputs.func }}
+        run: >
+          az functionapp deploy --type zip
+          -g "$RESOURCE_GROUP" -n "$FUNCTION_APP"
+          --src-path build/api.zip
+
+      - name: Deploy the web app
+        env:
+          SWA_NAME: ${{ steps.resources.outputs.swa }}
+          API_URL: ${{ steps.resources.outputs.api_url }}
+        run: |
+          set -euo pipefail
+          jq -n --arg apiUrl "$API_URL" '{apiUrl: $apiUrl}' > build/web/config.json
+          token=$(az staticwebapp secrets list -g "$RESOURCE_GROUP" -n "$SWA_NAME" --query properties.apiKey -o tsv)
+          echo "::add-mask::$token"
+          SWA_CLI_DEPLOYMENT_TOKEN="$token" npx --yes @azure/static-web-apps-cli@2.0.8 deploy build/web --env production
+
+      - name: Check that Dev works
+        env:
+          WEB_URL: ${{ steps.resources.outputs.web_url }}
+          API_URL: ${{ steps.resources.outputs.api_url }}
+        run: |
+          set -uo pipefail
+          wait_for() { # wait_for <url> <text>: retry while the new version starts up
+            for attempt in $(seq 1 24); do
+              body=$(curl -fsS --max-time 20 "$1" || true)
+              if grep -qF -- "$2" <<< "$body"; then echo "OK: $1"; return 0; fi
+              echo "Waiting for $1 (attempt $attempt)"; sleep 10
+            done
+            echo "::error::$1 did not return the expected content"; return 1
+          }
+          wait_for "$API_URL/api/health" '"status":"ok"' || exit 1
+          wait_for "$WEB_URL/config.json" "$API_URL" || exit 1
+          wait_for "$WEB_URL/" 'id="root"' || exit 1
+          cors=$(curl -sSI -H "Origin: $WEB_URL" "$API_URL/api/health" | tr -d '\r' | grep -i '^access-control-allow-origin' || true)
+          echo "CORS header: ${cors:-none}"
+          [ -n "$cors" ] || { echo "::error::The API does not allow the web app's origin"; exit 1; }
+          {
+            echo "### Dev is up"
+            echo "- Web app: $WEB_URL"
+            echo "- API: $API_URL/api/health"
+          } >> "$GITHUB_STEP_SUMMARY"

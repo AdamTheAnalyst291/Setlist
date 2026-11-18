@@ -16,5 +16,9 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.6"
-  }
+  },
+  "files": [
+    "dist",
+    "host.json"
+  ]
 }
