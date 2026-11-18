@@ -107,7 +107,7 @@ jobs:
         run: |
           set -euo pipefail
           one() { # one <description> <names...>: exactly one name must match
-            if [ "$#" -ne 2 ]; then echo "::error::Expected exactly one $1 in $RESOURCE_GROUP, found: ${*:2}"; exit 1; fi
+            if [ "$#" -ne 2 ]; then echo "::error::Expected exactly one $1 in $RESOURCE_GROUP, found: ${*:2}" >&2; exit 1; fi
             echo "$2"
           }
           swa=$(one "web app" $(az staticwebapp list -g "$RESOURCE_GROUP" --query "[?starts_with(name, 'swa-setlist-dev-')].name" -o tsv))
@@ -122,10 +122,12 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Deploy the API
+        env:
+          FUNCTION_APP: ${{ steps.resources.outputs.func }}
         run: >
-          az functionapp deployment source config-zip
-          -g "$RESOURCE_GROUP" -n "${{ steps.resources.outputs.func }}"
-          --src build/api.zip
+          az functionapp deploy --type zip
+          -g "$RESOURCE_GROUP" -n "$FUNCTION_APP"
+          --src-path build/api.zip
 
       - name: Deploy the web app
         env:
@@ -144,9 +146,10 @@ jobs:
           API_URL: ${{ steps.resources.outputs.api_url }}
         run: |
           set -uo pipefail
-          wait_for() { # wait_for <url> <grep pattern>: retry while the new version starts up
+          wait_for() { # wait_for <url> <text>: retry while the new version starts up
             for attempt in $(seq 1 24); do
-              if curl -fsS --max-time 20 "$1" | grep -q "$2"; then echo "OK: $1"; return 0; fi
+              body=$(curl -fsS --max-time 20 "$1" || true)
+              if grep -qF -- "$2" <<< "$body"; then echo "OK: $1"; return 0; fi
               echo "Waiting for $1 (attempt $attempt)"; sleep 10
             done
             echo "::error::$1 did not return the expected content"; return 1
