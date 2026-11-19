@@ -165,6 +165,23 @@ const S = {songs:[], crowds:[], events:[], practice:[], loaded:{}, errors:{}};
 const unwatch = {};
 let ui = Object.assign({tab:"discover", crowd:"", setName:"", setIds:[], libCrowd:"", libStatus:"", setCrowd:"", showAll:false}, load("cs-ui") || {});
 let queues = load("cs-queues") || {};
+// Claude sometimes puts its second thoughts or the artist into the title
+// ("Ants Marching? No - Crash Into Me", "Of Monsters and Men - Dirty Paws"). Keep just the song.
+function cleanTitle(title, artist){
+  let t = String(title||"").trim();
+  const rethink = /\?\s*(?:no|nope|actually|wait|or rather|better)\b[\s,.:;!\-–—]*(.+)$/i.exec(t);
+  if(rethink) t = rethink[1].trim();
+  const a = String(artist||"").trim().toLowerCase();
+  if(a){
+    for(const sep of [" - "," – "," — ",": "]){
+      if(t.toLowerCase().startsWith(a+sep)) t = t.slice(a.length+sep.length);
+      if(t.toLowerCase().endsWith(sep+a)) t = t.slice(0, t.length-sep.length-a.length);
+    }
+    if(t.toLowerCase().endsWith(" by "+a)) t = t.slice(0, t.length-a.length-4);
+  }
+  return t.replace(/^["'“”‘’]+|["'“”‘’]+$/g,"").trim();
+}
+Object.values(queues).forEach(q=>Array.isArray(q) && q.forEach(c=>{ c.title = cleanTitle(c.title, c.artist); }));
 let dealing = null, dealError = "", downMode = null, learnOpen = false, lastVote = null, editing = null;
 
 const $ = id => document.getElementById(id);
@@ -290,7 +307,8 @@ ALSO DO NOT SUGGEST: ${queued.join("; ")||"(nothing)"}
 
 Reply with only a JSON array of ${BATCH} objects and no other text, like:
 [{"title":"Song","artist":"Artist","year":1994,"why":"One sentence on why this crowd wants it.","taste_match":true,"taste_note":"short reason, or empty","difficulty":4,"vocal":"short note on how easy it is to sing"}]
-Vary eras and artists. difficulty is 1-10 for acoustic guitar.`;
+Vary eras and artists. difficulty is 1-10 for acoustic guitar.
+"title" is only the song's official title, exactly as released: no artist name, no question marks, no alternatives or second thoughts. If you change your mind about a pick, give only the final song.`;
 }
 async function deal(background){
   if(!sample || dealing) return;
@@ -302,7 +320,7 @@ async function deal(background){
     const out = await sample.json(buildPrompt(crowd, ex), {signal:ctl.signal, cache:false});
     const seen = new Set(Object.values(queues).flat().map(c=>key(c.title,c.artist)));
     const cards = (Array.isArray(out)?out:[]).filter(c=>c && c.title && c.artist).map(c=>({
-      title:String(c.title), artist:String(c.artist), year:c.year?String(c.year):"", why:String(c.why||""),
+      title:cleanTitle(c.title, c.artist), artist:String(c.artist).trim(), year:c.year?String(c.year):"", why:String(c.why||""),
       match:!!c.taste_match, matchNote:String(c.taste_note||""), diff:Math.max(0,Math.min(10,Math.round(+c.difficulty||0))), vocal:String(c.vocal||"")
     })).filter(c=>{ const k=key(c.title,c.artist); if(ex.has(k)||seen.has(k)) return false; seen.add(k); return true; });
     (queues[crowd.name] ||= []).push(...cards); saveQueues();
