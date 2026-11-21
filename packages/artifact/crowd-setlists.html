@@ -254,11 +254,15 @@ function renderHeader(){
   const cs = activeCrowds();
   if(!ui.crowd || !cs.some(c=>c.name===ui.crowd)) ui.crowd = cs[0]?.name || "";
   setHTML($("meters"), cs.map(c=>{
+    // The bar counts only Ready songs (Comfortable or better); new songs start on the Wishlist,
+    // so the line under it also shows every song for the crowd.
+    const all = S.songs.filter(s=>s.crowds.includes(c.name)).length;
     const ready = S.songs.filter(s=>s.crowds.includes(c.name) && isReady(s)).length;
     const pct = Math.min(100, Math.round(ready/c.goal*100));
     return `<button type="button" class="meter" aria-pressed="${c.name===ui.crowd}" data-crowd="${esc(c.name)}" title="${esc(c.desc||c.name)}">
-      <span class="top"><span><span class="sw" style="background:${esc(c.color)}"></span>${esc(c.name)}</span><span class="n">${ready}/${c.goal}</span></span>
-      <span class="bar"><i style="width:${pct}%;background:${esc(c.color)}"></i></span></button>`;
+      <span class="top"><span><span class="sw" style="background:${esc(c.color)}"></span>${esc(c.name)}</span><span class="n">${ready}/${c.goal} ready</span></span>
+      <span class="bar"><i style="width:${pct}%;background:${esc(c.color)}"></i></span>
+      <span class="n">${all} song${all===1?"":"s"} · ${all-ready} still learning or on the Wishlist</span></button>`;
   }).join(""));
 }
 function pop(text){ const p=$("pop"); p.textContent=text; p.classList.add("show"); clearTimeout(pop.t); pop.t=setTimeout(()=>p.classList.remove("show"),1400); }
