@@ -165,6 +165,23 @@ const S = {songs:[], crowds:[], events:[], practice:[], loaded:{}, errors:{}};
 const unwatch = {};
 let ui = Object.assign({tab:"discover", crowd:"", setName:"", setIds:[], libCrowd:"", libStatus:"", setCrowd:"", showAll:false}, load("cs-ui") || {});
 let queues = load("cs-queues") || {};
+// Claude sometimes puts its second thoughts or the artist into the title
+// ("Ants Marching? No - Crash Into Me", "Of Monsters and Men - Dirty Paws"). Keep just the song.
+function cleanTitle(title, artist){
+  let t = String(title||"").trim();
+  const rethink = /\?\s*(?:no|nope|actually|wait|or rather|better)\b[\s,.:;!\-–—]*(.+)$/i.exec(t);
+  if(rethink) t = rethink[1].trim();
+  const a = String(artist||"").trim().toLowerCase();
+  if(a){
+    for(const sep of [" - "," – "," — ",": "]){
+      if(t.toLowerCase().startsWith(a+sep)) t = t.slice(a.length+sep.length);
+      if(t.toLowerCase().endsWith(sep+a)) t = t.slice(0, t.length-sep.length-a.length);
+    }
+    if(t.toLowerCase().endsWith(" by "+a)) t = t.slice(0, t.length-a.length-4);
+  }
+  return t.replace(/^["'“”‘’]+|["'“”‘’]+$/g,"").trim();
+}
+Object.values(queues).forEach(q=>Array.isArray(q) && q.forEach(c=>{ c.title = cleanTitle(c.title, c.artist); }));
 let dealing = null, dealError = "", downMode = null, learnOpen = false, lastVote = null, editing = null;
 
 const $ = id => document.getElementById(id);
@@ -237,11 +254,15 @@ function renderHeader(){
   const cs = activeCrowds();
   if(!ui.crowd || !cs.some(c=>c.name===ui.crowd)) ui.crowd = cs[0]?.name || "";
   setHTML($("meters"), cs.map(c=>{
+    // The bar counts only Ready songs (Comfortable or better); new songs start on the Wishlist,
+    // so the line under it also shows every song for the crowd.
+    const all = S.songs.filter(s=>s.crowds.includes(c.name)).length;
     const ready = S.songs.filter(s=>s.crowds.includes(c.name) && isReady(s)).length;
     const pct = Math.min(100, Math.round(ready/c.goal*100));
     return `<button type="button" class="meter" aria-pressed="${c.name===ui.crowd}" data-crowd="${esc(c.name)}" title="${esc(c.desc||c.name)}">
-      <span class="top"><span><span class="sw" style="background:${esc(c.color)}"></span>${esc(c.name)}</span><span class="n">${ready}/${c.goal}</span></span>
-      <span class="bar"><i style="width:${pct}%;background:${esc(c.color)}"></i></span></button>`;
+      <span class="top"><span><span class="sw" style="background:${esc(c.color)}"></span>${esc(c.name)}</span><span class="n">${ready}/${c.goal} ready</span></span>
+      <span class="bar"><i style="width:${pct}%;background:${esc(c.color)}"></i></span>
+      <span class="n">${all} song${all===1?"":"s"} · ${all-ready} still learning or on the Wishlist</span></button>`;
   }).join(""));
 }
 function pop(text){ const p=$("pop"); p.textContent=text; p.classList.add("show"); clearTimeout(pop.t); pop.t=setTimeout(()=>p.classList.remove("show"),1400); }
@@ -253,7 +274,7 @@ function excluded(crowdName){
   const weekAgo = Date.now()-7*864e5;
   S.events.filter(e=>e.type==="vote").forEach(e=>{
     if(e.value==="down_not_mine") set.add(key(e.title,e.artist));
-    if(e.value==="down_wrong_crowd" && e.crowd===crowdName) set.add(key(e.title,e.artist));
+    if((e.value==="down_wrong_crowd" || e.value==="down_other") && e.crowd===crowdName) set.add(key(e.title,e.artist));
     if(e.value==="skip" && e.crowd===crowdName && new Date(e.ts).getTime()>weekAgo) set.add(key(e.title,e.artist));
   });
   return set;
@@ -283,14 +304,15 @@ ${lib}
 PRACTICE HISTORY (lean toward songs similar to ones they learned quickly or rated high; be careful with songs like the ones where singing was a struggle):
 ${practiceSummary()||"(none yet)"}
 
-VOTE HISTORY (up = wanted it for that crowd; down_not_mine = dislikes the song itself; down_wrong_crowd = wrong audience for that crowd; skip = not now). Learn from these, including reasons:
+VOTE HISTORY (up = wanted it for that crowd; down_not_mine = dislikes the song itself; down_wrong_crowd = wrong audience for that crowd; down_other = rejected for that crowd, for the reason given in the player's own words; skip = not now). Learn from these, including reasons:
 ${votes}
 
 ALSO DO NOT SUGGEST: ${queued.join("; ")||"(nothing)"}
 
 Reply with only a JSON array of ${BATCH} objects and no other text, like:
 [{"title":"Song","artist":"Artist","year":1994,"why":"One sentence on why this crowd wants it.","taste_match":true,"taste_note":"short reason, or empty","difficulty":4,"vocal":"short note on how easy it is to sing"}]
-Vary eras and artists. difficulty is 1-10 for acoustic guitar.`;
+Vary eras and artists. difficulty is 1-10 for acoustic guitar.
+"title" is only the song's official title, exactly as released: no artist name, no question marks, no alternatives or second thoughts. If you change your mind about a pick, give only the final song.`;
 }
 async function deal(background){
   if(!sample || dealing) return;
@@ -302,7 +324,7 @@ async function deal(background){
     const out = await sample.json(buildPrompt(crowd, ex), {signal:ctl.signal, cache:false});
     const seen = new Set(Object.values(queues).flat().map(c=>key(c.title,c.artist)));
     const cards = (Array.isArray(out)?out:[]).filter(c=>c && c.title && c.artist).map(c=>({
-      title:String(c.title), artist:String(c.artist), year:c.year?String(c.year):"", why:String(c.why||""),
+      title:cleanTitle(c.title, c.artist), artist:String(c.artist).trim(), year:c.year?String(c.year):"", why:String(c.why||""),
       match:!!c.taste_match, matchNote:String(c.taste_note||""), diff:Math.max(0,Math.min(10,Math.round(+c.difficulty||0))), vocal:String(c.vocal||"")
     })).filter(c=>{ const k=key(c.title,c.artist); if(ex.has(k)||seen.has(k)) return false; seen.add(k); return true; });
     (queues[crowd.name] ||= []).push(...cards); saveQueues();
@@ -333,7 +355,8 @@ function renderDiscover(){
         <div class="row">${others.map(c=>`<button type="button" data-wrong="${esc(c.name)}"><span class="sw" style="background:${esc(c.color)};display:inline-block;margin-right:6px"></span>${esc(c.name)}</button>`).join("")}</div>
         <div class="row"><input type="text" id="newCrowd" placeholder="New crowd name" aria-label="New crowd name" style="flex:1 1 160px"><input type="text" id="newCrowdDesc" placeholder="Who is this crowd? (optional)" aria-label="New crowd description" style="flex:2 1 220px"><button type="button" data-newcrowd>+ New crowd</button></div>
         <div class="row"><button type="button" data-wrong="">Just mark it wrong for ${esc(crowd.name)}</button><button type="button" data-downcancel>Back</button></div></div>`
-      : downMode==="ask" ? `<div class="choice"><b>What's wrong with it?</b><div class="row"><button type="button" data-notmine>Not my song</button><button type="button" data-wrongcrowd>Wrong crowd</button><button type="button" data-downcancel>Back</button></div></div>` : "";
+      : downMode==="ask" ? `<div class="choice"><b>What's wrong with it?</b><div class="row"><button type="button" data-notmine>Not my song</button><button type="button" data-wrongcrowd>Wrong crowd</button><button type="button" data-other>Other</button><button type="button" data-downcancel>Back</button></div></div>`
+      : downMode==="other" ? `<div class="choice"><b>What's wrong with it?</b><div class="row"><input type="text" id="otherReason" maxlength="200" placeholder="Say it in your own words" aria-label="What's wrong with it" style="flex:1 1 240px"><button type="button" class="primary" data-othersave>Save</button><button type="button" data-downcancel>Back</button></div></div>` : "";
     body = `<article class="card" aria-live="polite">
       <div><p class="title">${esc(card.title)}</p><p class="artist">${esc(card.artist)}${card.year?" · "+esc(card.year):""}</p></div>
       <p class="why">${esc(card.why)}</p>
@@ -354,7 +377,12 @@ function renderDiscover(){
       <p class="muted">Vote on one card at a time. 👍 adds the song to your Wishlist for this crowd.</p></div>`;
   }
   const reasons = lastVote ? `<div class="reasons"><span class="muted">${esc(lastVote.title)}: why? (optional)</span>${REASONS.map(r=>`<button type="button" data-reason="${esc(r)}" aria-pressed="${lastVote.note===r}">${esc(r)}</button>`).join("")}</div>` : "";
-  setHTML(v, `<div class="deck">${body}${reasons}</div>`);
+  // A background Deal can redraw the card while the player types, so keep what they wrote.
+  const typed = $("otherReason"), draft = typed?.value || "", hadFocus = document.activeElement===typed;
+  if(setHTML(v, `<div class="deck">${body}${reasons}</div>`) && $("otherReason")){
+    const box = $("otherReason"); box.value = draft;
+    if(hadFocus || !draft){ box.focus(); box.setSelectionRange(draft.length, draft.length); }
+  }
 }
 async function addSuggested(card, crowdName){
   const id = Math.max(0, ...S.songs.map(s=>s.id)) + 1;
@@ -373,7 +401,7 @@ async function logEvent(e){
   return ev;
 }
 function rowOf(r){ const m=/![A-Z]+(\d+)/.exec(r?.payload?.updates?.updatedRange||""); return m? +m[1] : null; }
-async function vote(kind, target){
+async function vote(kind, target, note){
   const crowdName = ui.crowd; const q = currentQueue(); const card = q.shift(); saveQueues();
   downMode=null; learnOpen=false; if(!card) return;
   const base = {title:card.title, artist:card.artist, crowd:crowdName};
@@ -383,6 +411,7 @@ async function vote(kind, target){
     if(kind==="up"){ const s = await addSuggested(card, crowdName); ev = await logEvent({...base, type:"vote", value:"up", songId:s.id}); pts=2; }
     else if(kind==="skip"){ ev = await logEvent({...base, type:"vote", value:"skip"}); pts=1; }
     else if(kind==="not_mine"){ ev = await logEvent({...base, type:"vote", value:"down_not_mine"}); pts=1; }
+    else if(kind==="other"){ ev = await logEvent({...base, type:"vote", value:"down_other", note}); pts=1; }
     else if(kind==="wrong"){
       ev = await logEvent({...base, type:"vote", value:"down_wrong_crowd"}); pts=1;
       if(target){ const s = await addSuggested(card, target); await logEvent({...base, crowd:target, type:"vote", value:"up", songId:s.id}); pts+=2; }
@@ -578,6 +607,11 @@ document.addEventListener("click", async e=>{
   if(t.dataset.vote){ vote(t.dataset.vote); return; }
   if(t.hasAttribute("data-notmine")){ vote("not_mine"); return; }
   if(t.hasAttribute("data-wrongcrowd")){ downMode="pick"; renderDiscover(); return; }
+  if(t.hasAttribute("data-other")){ downMode="other"; renderDiscover(); return; }
+  if(t.hasAttribute("data-othersave")){
+    const why = ($("otherReason")?.value || "").trim(); if(!why){ $("otherReason")?.focus(); return; }
+    vote("other", null, why); return;
+  }
   if(t.hasAttribute("data-downcancel")){ downMode=null; renderDiscover(); return; }
   if(t.dataset.wrong!==undefined){ vote("wrong", t.dataset.wrong || null); return; }
   if(t.hasAttribute("data-newcrowd")){
@@ -618,6 +652,9 @@ document.addEventListener("change", e=>{
   if(t.id==="libStatus"){ ui.libStatus=t.value; renderLibrary(); saveUI(); }
   if(t.id==="setCrowd"){ ui.setCrowd=t.value; renderSetlist(); saveUI(); }
   if(t.id==="showAll"){ ui.showAll=t.checked; renderSetlist(); saveUI(); }
+});
+document.addEventListener("keydown", e=>{
+  if(e.key==="Enter" && e.target.id==="otherReason"){ e.preventDefault(); document.querySelector("[data-othersave]")?.click(); }
 });
 document.addEventListener("input", e=>{
   if(e.target.id==="libQ") renderLibrary();
