@@ -270,7 +270,7 @@ function excluded(crowdName){
   const weekAgo = Date.now()-7*864e5;
   S.events.filter(e=>e.type==="vote").forEach(e=>{
     if(e.value==="down_not_mine") set.add(key(e.title,e.artist));
-    if(e.value==="down_wrong_crowd" && e.crowd===crowdName) set.add(key(e.title,e.artist));
+    if((e.value==="down_wrong_crowd" || e.value==="down_other") && e.crowd===crowdName) set.add(key(e.title,e.artist));
     if(e.value==="skip" && e.crowd===crowdName && new Date(e.ts).getTime()>weekAgo) set.add(key(e.title,e.artist));
   });
   return set;
@@ -300,7 +300,7 @@ ${lib}
 PRACTICE HISTORY (lean toward songs similar to ones they learned quickly or rated high; be careful with songs like the ones where singing was a struggle):
 ${practiceSummary()||"(none yet)"}
 
-VOTE HISTORY (up = wanted it for that crowd; down_not_mine = dislikes the song itself; down_wrong_crowd = wrong audience for that crowd; skip = not now). Learn from these, including reasons:
+VOTE HISTORY (up = wanted it for that crowd; down_not_mine = dislikes the song itself; down_wrong_crowd = wrong audience for that crowd; down_other = rejected for that crowd, for the reason given in the player's own words; skip = not now). Learn from these, including reasons:
 ${votes}
 
 ALSO DO NOT SUGGEST: ${queued.join("; ")||"(nothing)"}
@@ -351,7 +351,8 @@ function renderDiscover(){
         <div class="row">${others.map(c=>`<button type="button" data-wrong="${esc(c.name)}"><span class="sw" style="background:${esc(c.color)};display:inline-block;margin-right:6px"></span>${esc(c.name)}</button>`).join("")}</div>
         <div class="row"><input type="text" id="newCrowd" placeholder="New crowd name" aria-label="New crowd name" style="flex:1 1 160px"><input type="text" id="newCrowdDesc" placeholder="Who is this crowd? (optional)" aria-label="New crowd description" style="flex:2 1 220px"><button type="button" data-newcrowd>+ New crowd</button></div>
         <div class="row"><button type="button" data-wrong="">Just mark it wrong for ${esc(crowd.name)}</button><button type="button" data-downcancel>Back</button></div></div>`
-      : downMode==="ask" ? `<div class="choice"><b>What's wrong with it?</b><div class="row"><button type="button" data-notmine>Not my song</button><button type="button" data-wrongcrowd>Wrong crowd</button><button type="button" data-downcancel>Back</button></div></div>` : "";
+      : downMode==="ask" ? `<div class="choice"><b>What's wrong with it?</b><div class="row"><button type="button" data-notmine>Not my song</button><button type="button" data-wrongcrowd>Wrong crowd</button><button type="button" data-other>Other</button><button type="button" data-downcancel>Back</button></div></div>`
+      : downMode==="other" ? `<div class="choice"><b>What's wrong with it?</b><div class="row"><input type="text" id="otherReason" maxlength="200" placeholder="Say it in your own words" aria-label="What's wrong with it" style="flex:1 1 240px"><button type="button" class="primary" data-othersave>Save</button><button type="button" data-downcancel>Back</button></div></div>` : "";
     body = `<article class="card" aria-live="polite">
       <div><p class="title">${esc(card.title)}</p><p class="artist">${esc(card.artist)}${card.year?" · "+esc(card.year):""}</p></div>
       <p class="why">${esc(card.why)}</p>
@@ -372,7 +373,12 @@ function renderDiscover(){
       <p class="muted">Vote on one card at a time. 👍 adds the song to your Wishlist for this crowd.</p></div>`;
   }
   const reasons = lastVote ? `<div class="reasons"><span class="muted">${esc(lastVote.title)}: why? (optional)</span>${REASONS.map(r=>`<button type="button" data-reason="${esc(r)}" aria-pressed="${lastVote.note===r}">${esc(r)}</button>`).join("")}</div>` : "";
-  setHTML(v, `<div class="deck">${body}${reasons}</div>`);
+  // A background Deal can redraw the card while the player types, so keep what they wrote.
+  const typed = $("otherReason"), draft = typed?.value || "", hadFocus = document.activeElement===typed;
+  if(setHTML(v, `<div class="deck">${body}${reasons}</div>`) && $("otherReason")){
+    const box = $("otherReason"); box.value = draft;
+    if(hadFocus || !draft){ box.focus(); box.setSelectionRange(draft.length, draft.length); }
+  }
 }
 async function addSuggested(card, crowdName){
   const id = Math.max(0, ...S.songs.map(s=>s.id)) + 1;
@@ -391,7 +397,7 @@ async function logEvent(e){
   return ev;
 }
 function rowOf(r){ const m=/![A-Z]+(\d+)/.exec(r?.payload?.updates?.updatedRange||""); return m? +m[1] : null; }
-async function vote(kind, target){
+async function vote(kind, target, note){
   const crowdName = ui.crowd; const q = currentQueue(); const card = q.shift(); saveQueues();
   downMode=null; learnOpen=false; if(!card) return;
   const base = {title:card.title, artist:card.artist, crowd:crowdName};
@@ -401,6 +407,7 @@ async function vote(kind, target){
     if(kind==="up"){ const s = await addSuggested(card, crowdName); ev = await logEvent({...base, type:"vote", value:"up", songId:s.id}); pts=2; }
     else if(kind==="skip"){ ev = await logEvent({...base, type:"vote", value:"skip"}); pts=1; }
     else if(kind==="not_mine"){ ev = await logEvent({...base, type:"vote", value:"down_not_mine"}); pts=1; }
+    else if(kind==="other"){ ev = await logEvent({...base, type:"vote", value:"down_other", note}); pts=1; }
     else if(kind==="wrong"){
       ev = await logEvent({...base, type:"vote", value:"down_wrong_crowd"}); pts=1;
       if(target){ const s = await addSuggested(card, target); await logEvent({...base, crowd:target, type:"vote", value:"up", songId:s.id}); pts+=2; }
@@ -596,6 +603,11 @@ document.addEventListener("click", async e=>{
   if(t.dataset.vote){ vote(t.dataset.vote); return; }
   if(t.hasAttribute("data-notmine")){ vote("not_mine"); return; }
   if(t.hasAttribute("data-wrongcrowd")){ downMode="pick"; renderDiscover(); return; }
+  if(t.hasAttribute("data-other")){ downMode="other"; renderDiscover(); return; }
+  if(t.hasAttribute("data-othersave")){
+    const why = ($("otherReason")?.value || "").trim(); if(!why){ $("otherReason")?.focus(); return; }
+    vote("other", null, why); return;
+  }
   if(t.hasAttribute("data-downcancel")){ downMode=null; renderDiscover(); return; }
   if(t.dataset.wrong!==undefined){ vote("wrong", t.dataset.wrong || null); return; }
   if(t.hasAttribute("data-newcrowd")){
@@ -636,6 +648,9 @@ document.addEventListener("change", e=>{
   if(t.id==="libStatus"){ ui.libStatus=t.value; renderLibrary(); saveUI(); }
   if(t.id==="setCrowd"){ ui.setCrowd=t.value; renderSetlist(); saveUI(); }
   if(t.id==="showAll"){ ui.showAll=t.checked; renderSetlist(); saveUI(); }
+});
+document.addEventListener("keydown", e=>{
+  if(e.key==="Enter" && e.target.id==="otherReason"){ e.preventDefault(); document.querySelector("[data-othersave]")?.click(); }
 });
 document.addEventListener("input", e=>{
   if(e.target.id==="libQ") renderLibrary();
